@@ -1,26 +1,339 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的网页</title>
+    <title>采购单自动填写与审核</title>
+    <!-- SheetJS library for Excel generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            line-height: 1.6;
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .container { max-width: 900px; margin: auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        h1, h2 { text-align: center; color: #333; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input[type="text"], input[type="email"], input[type="number"], input[type="url"] {
+            width: calc(100% - 22px); padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px;
         }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
+        button {
+            background-color: #007bff; color: white; padding: 10px 15px; border: none;
+            border-radius: 4px; cursor: pointer; margin-top: 15px; margin-right: 10px;
         }
+        button:hover { background-color: #0056b3; }
+        .error { color: red; font-size: 0.9em; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .section { margin-top: 30px; padding-top: 20px; border-top: 1px dashed #ccc; }
+        #totalPrice { font-weight: bold; color: green; }
+        .item-row td:last-child { white-space: pre-wrap; word-break: break-all; } /* For remarks */
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>欢迎来到我的网页</h1>
-        <p>这是一个基本的HTML页面。</p>
+        <h1>采购单填写</h1>
+        <form id="purchaseForm">
+            <label for="fillerName">填写人:</label>
+            <input type="text" id="fillerName" required>
+
+            <label for="fillerEmail">填写人邮箱:</label>
+            <input type="email" id="fillerEmail" required>
+
+            <label for="productLink">商品链接 (粘贴后请手动填写下方信息):</label>
+            <input type="url" id="productLink">
+            <small>注意: 自动从链接获取信息功能复杂, 此处仅保存链接, 请手动填写商品详情。</small>
+
+            <label for="productName">名称:</label>
+            <input type="text" id="productName" required>
+
+            <label for="productModel">型号:</label>
+            <input type="text" id="productModel">
+
+            <label for="quantity">数量:</label>
+            <input type="number" id="quantity" min="1" required>
+
+            <label for="unitPrice">单价 (元):</label>
+            <input type="number" id="unitPrice" step="0.01" min="0" required>
+
+            <label for="remarks">商品备注:</label>
+            <input type="text" id="remarks">
+
+            <div>总价: <span id="totalPriceDisplay">0.00</span> 元</div>
+
+            <button type="button" onclick="addItem()">添加商品</button>
+            <button type="button" onclick="generateExcel()">生成采购单 (Excel)</button>
+            <button type="button" onclick="clearCurrentItems()">清空当前列表</button>
+        </form>
+
+        <h2>当前待采购商品列表</h2>
+        <table id="currentItemsTable">
+            <thead>
+                <tr>
+                    <th>填写人</th>
+                    <th>邮箱</th>
+                    <th>名称</th>
+                    <th>型号</th>
+                    <th>数量</th>
+                    <th>单价</th>
+                    <th>链接</th>
+                    <th>总价</th>
+                    <th>备注</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Items will be added here -->
+            </tbody>
+        </table>
+
+        <div class="section">
+            <h2>采购单审核</h2>
+            <p>上传需要审核的采购单 Excel 文件 (通常是之前生成的以日期命名的文件)。</p>
+            <label for="excelFileToApprove">选择Excel文件进行审核:</label>
+            <input type="file" id="excelFileToApprove" accept=".xlsx, .xls">
+            <button type="button" onclick="loadExcelForApproval()">加载并显示待审核项</button>
+
+            <div id="approvalArea" style="display:none;">
+                <h3>待审核商品: <span id="approvalFileName"></span></h3>
+                <table id="approvalTable">
+                    <thead>
+                        <tr>
+                            <th>审核 (勾选为同意)</th>
+                            <th>填写人</th>
+                            <th>邮箱</th>
+                            <th>名称</th>
+                            <th>型号</th>
+                            <th>数量</th>
+                            <th>单价</th>
+                            <th>链接</th>
+                            <th>总价</th>
+                            <th>备注</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Approval items will be loaded here -->
+                    </tbody>
+                </table>
+                <button type="button" onclick="generateApprovedExcel()">生成审核通过的采购单</button>
+            </div>
+        </div>
     </div>
+
+    <script>
+        let purchaseItems = []; // Array to store current purchase items
+        let itemsForApproval = []; // Array to store items loaded from Excel for approval
+
+        // Update total price display
+        document.getElementById('quantity').addEventListener('input', updateTotal);
+        document.getElementById('unitPrice').addEventListener('input', updateTotal);
+
+        function updateTotal() {
+            const quantity = parseFloat(document.getElementById('quantity').value) || 0;
+            const unitPrice = parseFloat(document.getElementById('unitPrice').value) || 0;
+            const totalPrice = (quantity * unitPrice).toFixed(2);
+            document.getElementById('totalPriceDisplay').textContent = totalPrice;
+        }
+
+        function addItem() {
+            const fillerName = document.getElementById('fillerName').value.trim();
+            const fillerEmail = document.getElementById('fillerEmail').value.trim();
+            const productName = document.getElementById('productName').value.trim();
+            const productModel = document.getElementById('productModel').value.trim();
+            const quantity = parseInt(document.getElementById('quantity').value);
+            const unitPrice = parseFloat(document.getElementById('unitPrice').value);
+            const productLink = document.getElementById('productLink').value.trim();
+            const remarks = document.getElementById('remarks').value.trim();
+
+            if (!fillerName || !fillerEmail || !productName || isNaN(quantity) || quantity <= 0 || isNaN(unitPrice) || unitPrice < 0) {
+                alert('请填写所有必填项 (填写人, 邮箱, 名称, 数量, 单价) 并确保数值有效。');
+                return;
+            }
+
+            const totalPrice = parseFloat((quantity * unitPrice).toFixed(2));
+
+            const item = {
+                "填写人": fillerName,
+                "填写人邮箱": fillerEmail,
+                "名称": productName,
+                "型号": productModel,
+                "数量": quantity,
+                "单价": unitPrice,
+                "链接": productLink,
+                "总价": totalPrice,
+                "商品备注": remarks
+            };
+
+            purchaseItems.push(item);
+            renderCurrentItemsTable();
+            document.getElementById('purchaseForm').reset(); // Reset form fields
+            document.getElementById('totalPriceDisplay').textContent = '0.00'; // Reset total price display
+        }
+
+        function renderCurrentItemsTable() {
+            const tbody = document.getElementById('currentItemsTable').getElementsByTagName('tbody')[0];
+            tbody.innerHTML = ''; // Clear existing rows
+
+            purchaseItems.forEach((item, index) => {
+                const row = tbody.insertRow();
+                row.className = 'item-row';
+                row.insertCell().textContent = item["填写人"];
+                row.insertCell().textContent = item["填写人邮箱"];
+                row.insertCell().textContent = item["名称"];
+                row.insertCell().textContent = item["型号"];
+                row.insertCell().textContent = item["数量"];
+                row.insertCell().textContent = item["单价"].toFixed(2);
+                row.insertCell().textContent = item["链接"];
+                row.insertCell().textContent = item["总价"].toFixed(2);
+                row.insertCell().textContent = item["商品备注"];
+                
+                const actionCell = row.insertCell();
+                const removeButton = document.createElement('button');
+                removeButton.textContent = '移除';
+                removeButton.onclick = () => removeItem(index);
+                actionCell.appendChild(removeButton);
+            });
+        }
+        
+        function removeItem(index) {
+            if (confirm('确定要移除此商品吗?')) {
+                purchaseItems.splice(index, 1);
+                renderCurrentItemsTable();
+            }
+        }
+
+        function clearCurrentItems() {
+            if (confirm('确定要清空当前所有待采购商品吗? 这将清除列表但不会影响已生成的Excel文件。')) {
+                purchaseItems = [];
+                renderCurrentItemsTable();
+            }
+        }
+
+        function generateExcel() {
+            if (purchaseItems.length === 0) {
+                alert('没有可导出的商品。请先添加商品。');
+                return;
+            }
+
+            const worksheet = XLSX.utils.json_to_sheet(purchaseItems, {
+                header: ["填写人", "填写人邮箱", "名称", "型号", "数量", "单价", "链接", "总价", "商品备注"]
+            });
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "采购单");
+
+            // Generate filename with current date
+            const today = new Date();
+            const dateString = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+            const fileName = `采购单_${dateString}.xlsx`;
+
+            XLSX.writeFile(workbook, fileName);
+            alert(`采购单 "${fileName}" 已生成并开始下载。\n请注意：当前列表中的商品已导出。如需开始新的采购周期，建议先"清空当前列表"。`);
+        }
+
+        function loadExcelForApproval() {
+            const fileInput = document.getElementById('excelFileToApprove');
+            if (fileInput.files.length === 0) {
+                alert('请先选择一个Excel文件。');
+                return;
+            }
+            const file = fileInput.files[0];
+            document.getElementById('approvalFileName').textContent = `(文件: ${file.name})`;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    itemsForApproval = XLSX.utils.sheet_to_json(worksheet, { defval: "" }); // Use defval to handle empty cells
+
+                    renderApprovalTable();
+                    document.getElementById('approvalArea').style.display = 'block';
+                } catch (error) {
+                    console.error("Error reading Excel file:", error);
+                    alert("无法读取或解析Excel文件。请确保文件格式正确且未损坏。\n错误: " + error.message);
+                    document.getElementById('approvalArea').style.display = 'none';
+                }
+            };
+            reader.onerror = function(e) {
+                console.error("FileReader error:", e);
+                alert("读取文件时发生错误。");
+                document.getElementById('approvalArea').style.display = 'none';
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function renderApprovalTable() {
+            const tbody = document.getElementById('approvalTable').getElementsByTagName('tbody')[0];
+            tbody.innerHTML = ''; // Clear existing rows
+
+            itemsForApproval.forEach((item, index) => {
+                const row = tbody.insertRow();
+                const approvalCell = row.insertCell();
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `approve_${index}`;
+                checkbox.checked = true; // Default to approved
+                approvalCell.appendChild(checkbox);
+
+                // Ensure all expected columns exist, even if empty in the Excel
+                const expectedCols = ["填写人", "填写人邮箱", "名称", "型号", "数量", "单价", "链接", "总价", "商品备注"];
+                expectedCols.forEach(colName => {
+                    let cellValue = item[colName];
+                    if (colName === "单价" || colName === "总价") {
+                        cellValue = typeof cellValue === 'number' ? cellValue.toFixed(2) : (parseFloat(cellValue) || 0).toFixed(2);
+                    } else if (colName === "数量") {
+                         cellValue = parseInt(cellValue) || 0;
+                    }
+                    row.insertCell().textContent = cellValue === undefined || cellValue === null ? "" : cellValue;
+                });
+            });
+        }
+
+        function generateApprovedExcel() {
+            const approvedItems = [];
+            itemsForApproval.forEach((item, index) => {
+                const checkbox = document.getElementById(`approve_${index}`);
+                if (checkbox && checkbox.checked) {
+                    // Reconstruct item to ensure correct column order and data types
+                    const approvedItem = {
+                        "填写人": item["填写人"] || "",
+                        "填写人邮箱": item["填写人邮箱"] || "",
+                        "名称": item["名称"] || "",
+                        "型号": item["型号"] || "",
+                        "数量": parseInt(item["数量"]) || 0,
+                        "单价": parseFloat(item["单价"]) || 0,
+                        "链接": item["链接"] || "",
+                        "总价": parseFloat(item["总价"]) || 0, // Recalculate or trust, here trusting
+                        "商品备注": item["商品备注"] || ""
+                    };
+                    // Ensure total price is correct if values might have changed (or re-calculate)
+                    approvedItem["总价"] = parseFloat((approvedItem["数量"] * approvedItem["单价"]).toFixed(2));
+                    approvedItems.push(approvedItem);
+                }
+            });
+
+            if (approvedItems.length === 0) {
+                alert('没有勾选任何审核通过的商品。');
+                return;
+            }
+
+            const worksheet = XLSX.utils.json_to_sheet(approvedItems, {
+                header: ["填写人", "填写人邮箱", "名称", "型号", "数量", "单价", "链接", "总价", "商品备注"]
+            });
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "审核通过采购单");
+
+            const today = new Date();
+            const dateString = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+            const originalFileName = document.getElementById('excelFileToApprove').files[0]?.name.replace(/\.xlsx?$/, '') || '采购单';
+            const fileName = `${originalFileName}_审核通过_${dateString}.xlsx`;
+
+            XLSX.writeFile(workbook, fileName);
+            alert(`审核通过的采购单 "${fileName}" 已生成并开始下载。`);
+        }
+
+        // Initialize
+        updateTotal(); // Calculate initial total price (0.00)
+    </script>
 </body>
-</html> 
+</html>
