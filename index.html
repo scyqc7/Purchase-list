@@ -98,6 +98,7 @@
                     <div>审核文件: <span id="approvalFileNameDisplay">无</span></div>
                     <div>最后更新时间: <span id="lastUpdateTime">-</span></div>
                     <div>协作状态: <span id="collaborationStatus" style="color: #28a745;">🟢 已连接</span></div>
+                    <div>同步状态: <span id="syncStatus" style="color: #28a745;">🔄 实时同步中</span></div>
                 </div>
                 
                 <!-- 采购周期管理 -->
@@ -261,9 +262,13 @@
             console.log('协作功能已初始化');
             isCollaborationEnabled = true;
             
+            // 从localStorage加载共享数据
+            loadSharedData();
+            
             // 初始化共享数据
             if (sharedPurchaseItems.length === 0) {
                 sharedPurchaseItems = [...purchaseItems];
+                saveSharedData();
             } else {
                 // 同步其他用户的数据
                 purchaseItems = [...sharedPurchaseItems];
@@ -273,6 +278,7 @@
             // 初始化共享审核数据
             if (sharedApprovalItems.length === 0) {
                 sharedApprovalItems = [...itemsForApproval];
+                saveSharedData();
             } else {
                 // 同步其他用户的审核数据
                 itemsForApproval = [...sharedApprovalItems];
@@ -288,6 +294,9 @@
             
             // 更新状态显示
             updateSharedItemsStatus();
+            
+            // 设置定时器定期检查数据更新
+            setInterval(checkForDataUpdates, 2000);
         }
 
         // 用户登录
@@ -407,6 +416,7 @@
             const approvalFileNameDisplay = document.getElementById('approvalFileNameDisplay');
             const lastUpdateTime = document.getElementById('lastUpdateTime');
             const collaborationStatus = document.getElementById('collaborationStatus');
+            const syncStatus = document.getElementById('syncStatus');
             
             if (sharedItemCount) {
                 const totalItems = sharedPurchaseItems.length + sharedApprovalItems.length;
@@ -438,6 +448,16 @@
                     collaborationStatus.style.color = '#dc3545';
                 }
             }
+            
+            if (syncStatus) {
+                if (isCollaborationEnabled && currentUser) {
+                    syncStatus.innerHTML = '🔄 实时同步中';
+                    syncStatus.style.color = '#28a745';
+                } else {
+                    syncStatus.innerHTML = '⏸️ 同步已暂停';
+                    syncStatus.style.color = '#ffc107';
+                }
+            }
         }
 
         // 同步审核商品列表到所有用户
@@ -446,6 +466,10 @@
                 sharedApprovalItems = [...itemsForApproval];
                 // 更新状态显示
                 updateSharedItemsStatus();
+                // 保存到localStorage
+                saveSharedData();
+                // 记录更新时间
+                localStorage.setItem('lastDataUpdate', Date.now().toString());
                 // 模拟广播给其他用户
                 broadcastApprovalItemsUpdate();
             }
@@ -475,6 +499,10 @@
                 sharedPurchaseItems = [...purchaseItems];
                 // 更新状态显示
                 updateSharedItemsStatus();
+                // 保存到localStorage
+                saveSharedData();
+                // 记录更新时间
+                localStorage.setItem('lastDataUpdate', Date.now().toString());
                 // 模拟广播给其他用户
                 broadcastPurchaseItemsUpdate();
             }
@@ -980,6 +1008,84 @@
             
             if (historyCountElement) {
                 historyCountElement.textContent = purchaseHistory.length;
+            }
+        }
+
+        // 保存共享数据到localStorage
+        function saveSharedData() {
+            if (isCollaborationEnabled) {
+                const sharedData = {
+                    purchaseItems: sharedPurchaseItems,
+                    approvalItems: sharedApprovalItems,
+                    approvalFileName: sharedApprovalFileName,
+                    lastUpdate: Date.now(),
+                    updateUser: currentUser ? currentUser.name : 'System'
+                };
+                localStorage.setItem('sharedPurchaseData', JSON.stringify(sharedData));
+            }
+        }
+
+        // 从localStorage加载共享数据
+        function loadSharedData() {
+            const savedData = localStorage.getItem('sharedPurchaseData');
+            if (savedData) {
+                try {
+                    const data = JSON.parse(savedData);
+                    sharedPurchaseItems = data.purchaseItems || [];
+                    sharedApprovalItems = data.approvalItems || [];
+                    sharedApprovalFileName = data.approvalFileName || '';
+                } catch (error) {
+                    console.error('加载共享数据失败:', error);
+                }
+            }
+        }
+
+        // 检查数据更新
+        function checkForDataUpdates() {
+            if (!isCollaborationEnabled || !currentUser) return;
+            
+            const savedData = localStorage.getItem('sharedPurchaseData');
+            if (savedData) {
+                try {
+                    const data = JSON.parse(savedData);
+                    const lastUpdate = data.lastUpdate || 0;
+                    const currentLastUpdate = localStorage.getItem('lastDataUpdate') || '0';
+                    
+                    // 如果发现新的更新
+                    if (lastUpdate > parseInt(currentLastUpdate)) {
+                        console.log('检测到数据更新，同步中...');
+                        
+                        // 更新本地数据
+                        sharedPurchaseItems = data.purchaseItems || [];
+                        sharedApprovalItems = data.approvalItems || [];
+                        sharedApprovalFileName = data.approvalFileName || '';
+                        
+                        // 同步到当前用户界面
+                        purchaseItems = [...sharedPurchaseItems];
+                        itemsForApproval = [...sharedApprovalItems];
+                        
+                        // 更新显示
+                        renderCurrentItemsTable();
+                        if (itemsForApproval.length > 0) {
+                            document.getElementById('approvalFileName').textContent = `(文件: ${sharedApprovalFileName})`;
+                            document.getElementById('approvalArea').style.display = 'block';
+                            renderApprovalTable();
+                        }
+                        
+                        // 更新状态显示
+                        updateSharedItemsStatus();
+                        
+                        // 记录最后更新时间
+                        localStorage.setItem('lastDataUpdate', lastUpdate.toString());
+                        
+                        // 添加同步记录
+                        if (data.updateUser && data.updateUser !== currentUser.name) {
+                            addEditHistory('数据同步', `同步了 ${data.updateUser} 的更新`);
+                        }
+                    }
+                } catch (error) {
+                    console.error('检查数据更新失败:', error);
+                }
             }
         }
 
