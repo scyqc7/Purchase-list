@@ -309,7 +309,10 @@
 
         // 初始化WebSocket连接（真实实现）
         function initializeWebSocket() {
-            const wsUrl = `ws://${window.location.hostname}:3000`;
+            // 获取当前页面的端口，如果使用Node.js服务器则使用3000，否则使用当前端口
+            const currentPort = window.location.port;
+            const wsPort = currentPort === '3000' ? '3000' : '3000'; // 统一使用3000端口
+            const wsUrl = `ws://${window.location.hostname}:${wsPort}`;
             console.log('正在连接WebSocket服务器 | Connecting to WebSocket server:', wsUrl);
             
             try {
@@ -863,14 +866,91 @@
                 return;
             }
 
-            const ws = XLSX.utils.json_to_sheet(purchaseItems);
+            // 创建工作簿
             const wb = XLSX.utils.book_new();
+            
+            // 准备数据，添加序号和格式化
+            const excelData = purchaseItems.map((item, index) => ({
+                '序号 | No.': index + 1,
+                '商品名称 | Product Name': item.name,
+                '数量 | Quantity': item.quantity,
+                '单价 | Unit Price (CNY)': item.price,
+                '总价 | Total Price (CNY)': item.total,
+                '商品链接 | Product Link': item.link,
+                '优先级 | Priority': item.priority,
+                '备注 | Notes': item.notes,
+                '添加人 | Added By': item.addedBy,
+                '添加时间 | Added At': item.addedAt
+            }));
+
+            // 创建工作表
+            const ws = XLSX.utils.json_to_sheet(excelData);
+            
+            // 设置列宽
+            const colWidths = [
+                { wch: 8 },   // 序号
+                { wch: 25 },  // 商品名称
+                { wch: 10 },  // 数量
+                { wch: 15 },  // 单价
+                { wch: 15 },  // 总价
+                { wch: 40 },  // 商品链接
+                { wch: 12 },  // 优先级
+                { wch: 20 },  // 备注
+                { wch: 15 },  // 添加人
+                { wch: 20 }   // 添加时间
+            ];
+            ws['!cols'] = colWidths;
+
+            // 设置标题行样式
+            const range = XLSX.utils.decode_range(ws['!ref']);
+            for (let col = range.s.c; col <= range.e.c; col++) {
+                const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+                if (!ws[cellAddress]) continue;
+                
+                ws[cellAddress].s = {
+                    font: { bold: true, color: { rgb: "FFFFFF" } },
+                    fill: { fgColor: { rgb: "4472C4" } },
+                    alignment: { horizontal: "center", vertical: "center" },
+                    border: {
+                        top: { style: "thin" },
+                        bottom: { style: "thin" },
+                        left: { style: "thin" },
+                        right: { style: "thin" }
+                    }
+                };
+            }
+
+            // 设置数据行样式
+            for (let row = 1; row <= range.e.r; row++) {
+                for (let col = range.s.c; col <= range.e.c; col++) {
+                    const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+                    if (!ws[cellAddress]) continue;
+                    
+                    ws[cellAddress].s = {
+                        alignment: { horizontal: "center", vertical: "center" },
+                        border: {
+                            top: { style: "thin" },
+                            bottom: { style: "thin" },
+                            left: { style: "thin" },
+                            right: { style: "thin" }
+                        }
+                    };
+                    
+                    // 为数字列设置特殊格式
+                    if (col === 2 || col === 3 || col === 4) { // 数量、单价、总价列
+                        ws[cellAddress].s.numFmt = "#,##0.00";
+                    }
+                }
+            }
+
+            // 添加工作表到工作簿
             XLSX.utils.book_append_sheet(wb, ws, "采购清单 | Purchase List");
             
             // 生成文件名
             const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
             const fileName = `采购清单_${timestamp}.xlsx`;
             
+            // 导出文件
             XLSX.writeFile(wb, fileName);
             
             // 将数据添加到审核列表
@@ -992,20 +1072,24 @@
             itemsForApproval.forEach((item, index) => {
                 const checkbox = document.getElementById(`approve_${index}`);
                 if (checkbox && checkbox.checked) {
-                    // Reconstruct item to ensure correct column order and data types
+                    // 重构商品数据，确保正确的列顺序和数据类型
                     const approvedItem = {
-                        "填写人": item["填写人"] || "",
-                        "填写人邮箱": item["填写人邮箱"] || "",
-                        "名称": item["名称"] || "",
-                        "型号": item["型号"] || "",
-                        "数量": parseInt(item["数量"]) || 0,
-                        "单价": parseFloat(item["单价"]) || 0,
-                        "链接": item["链接"] || "",
-                        "总价": parseFloat(item["总价"]) || 0, // Recalculate or trust, here trusting
-                        "商品备注": item["商品备注"] || ""
+                        "序号 | No.": approvedItems.length + 1,
+                        "商品名称 | Product Name": item.name || "",
+                        "数量 | Quantity": parseInt(item.quantity) || 0,
+                        "单价 | Unit Price (CNY)": parseFloat(item.price) || 0,
+                        "总价 | Total Price (CNY)": parseFloat(item.total) || 0,
+                        "商品链接 | Product Link": item.link || "",
+                        "优先级 | Priority": item.priority || "medium",
+                        "备注 | Notes": item.notes || "",
+                        "添加人 | Added By": item.addedBy || "",
+                        "添加时间 | Added At": item.addedAt || "",
+                        "审核状态 | Approval Status": "已通过 | Approved",
+                        "审核人 | Approved By": currentUser?.name || "Unknown",
+                        "审核时间 | Approval Time": new Date().toLocaleString('zh-CN')
                     };
-                    // Ensure total price is correct if values might have changed (or re-calculate)
-                    approvedItem["总价"] = parseFloat((approvedItem["数量"] * approvedItem["单价"]).toFixed(2));
+                    // 确保总价正确
+                    approvedItem["总价 | Total Price (CNY)"] = parseFloat((approvedItem["数量 | Quantity"] * approvedItem["单价 | Unit Price (CNY)"]).toFixed(2));
                     approvedItems.push(approvedItem);
                 }
             });
@@ -1015,18 +1099,86 @@
                 return;
             }
 
-            const worksheet = XLSX.utils.json_to_sheet(approvedItems, {
-                header: ["填写人", "填写人邮箱", "名称", "型号", "数量", "单价", "链接", "总价", "商品备注"]
-            });
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "审核通过采购单");
+            // 创建工作簿
+            const wb = XLSX.utils.book_new();
+            
+            // 创建工作表
+            const ws = XLSX.utils.json_to_sheet(approvedItems);
+            
+            // 设置列宽
+            const colWidths = [
+                { wch: 8 },   // 序号
+                { wch: 25 },  // 商品名称
+                { wch: 10 },  // 数量
+                { wch: 15 },  // 单价
+                { wch: 15 },  // 总价
+                { wch: 40 },  // 商品链接
+                { wch: 12 },  // 优先级
+                { wch: 20 },  // 备注
+                { wch: 15 },  // 添加人
+                { wch: 20 },  // 添加时间
+                { wch: 15 },  // 审核状态
+                { wch: 15 },  // 审核人
+                { wch: 20 }   // 审核时间
+            ];
+            ws['!cols'] = colWidths;
+
+            // 设置标题行样式
+            const range = XLSX.utils.decode_range(ws['!ref']);
+            for (let col = range.s.c; col <= range.e.c; col++) {
+                const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+                if (!ws[cellAddress]) continue;
+                
+                ws[cellAddress].s = {
+                    font: { bold: true, color: { rgb: "FFFFFF" } },
+                    fill: { fgColor: { rgb: "28A745" } }, // 绿色主题表示审核通过
+                    alignment: { horizontal: "center", vertical: "center" },
+                    border: {
+                        top: { style: "thin" },
+                        bottom: { style: "thin" },
+                        left: { style: "thin" },
+                        right: { style: "thin" }
+                    }
+                };
+            }
+
+            // 设置数据行样式
+            for (let row = 1; row <= range.e.r; row++) {
+                for (let col = range.s.c; col <= range.e.c; col++) {
+                    const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+                    if (!ws[cellAddress]) continue;
+                    
+                    ws[cellAddress].s = {
+                        alignment: { horizontal: "center", vertical: "center" },
+                        border: {
+                            top: { style: "thin" },
+                            bottom: { style: "thin" },
+                            left: { style: "thin" },
+                            right: { style: "thin" }
+                        }
+                    };
+                    
+                    // 为数字列设置特殊格式
+                    if (col === 2 || col === 3 || col === 4) { // 数量、单价、总价列
+                        ws[cellAddress].s.numFmt = "#,##0.00";
+                    }
+                    
+                    // 为审核状态列设置特殊颜色
+                    if (col === 10) { // 审核状态列
+                        ws[cellAddress].s.fill = { fgColor: { rgb: "D4EDDA" } }; // 浅绿色背景
+                    }
+                }
+            }
+
+            // 添加工作表到工作簿
+            XLSX.utils.book_append_sheet(wb, ws, "审核通过采购单 | Approved Purchase List");
 
             const today = new Date();
             const dateString = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
             const originalFileName = document.getElementById('excelFileToApprove').files[0]?.name.replace(/\.xlsx?$/, '') || '采购单';
             const fileName = `${originalFileName}_审核通过_${dateString}.xlsx`;
 
-            XLSX.writeFile(workbook, fileName);
+            XLSX.writeFile(wb, fileName);
             alert(`审核通过的采购单 "${fileName}" 已生成并开始下载。 | Approved purchase order "${fileName}" has been generated and download started.`);
             
             // 添加编辑记录
