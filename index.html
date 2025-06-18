@@ -99,8 +99,8 @@
                     <div>审核商品 | Approval Items: <span id="approvalItemCount">0</span> 个</div>
                     <div>审核文件 | Approval File: <span id="approvalFileNameDisplay">无</span></div>
                     <div>最后更新时间 | Last Update: <span id="lastUpdateTime">-</span></div>
-                    <div>协作状态 | Collaboration Status: <span id="collaborationStatus" style="color: #28a745;">🟢 已连接</span></div>
-                    <div>同步状态 | Sync Status: <span id="syncStatus" style="color: #28a745;">🟢 已连接</span></div>
+                    <div>协作状态 | Collaboration Status: <span id="collaborationStatus" style="color: #28a745;">🟢 已启用</span></div>
+                    <div>同步状态 | Sync Status: <span id="syncStatus" style="color: #28a745;">🔄 同步中</span></div>
                 </div>
                 
                 <!-- 采购周期管理 -->
@@ -112,6 +112,14 @@
                     <div>历史记录数量 | History Records: <span id="historyCount">0</span> 个周期</div>
                     <button type="button" onclick="viewPurchaseHistory()" style="background-color: #17a2b8; margin-top: 10px;">📋 查看历史采购列表 | View History</button>
                     <button type="button" onclick="forceUpdatePeriod()" style="background-color: #ffc107; color: black; margin-top: 10px; margin-left: 10px;">🔄 强制更新周期 | Force Update</button>
+                </div>
+                
+                <!-- 过往表格管理 -->
+                <h4>📊 过往表格管理 | Saved Tables Management</h4>
+                <div id="savedTablesStatus" style="background: white; border: 1px solid #ddd; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+                    <div>保存的表格数量 | Saved Tables: <span id="savedTablesCount">0</span> 个</div>
+                    <button type="button" onclick="saveCurrentTable()" style="background-color: #28a745; margin-top: 10px;">💾 保存当前表格 | Save Current Table</button>
+                    <button type="button" onclick="viewSavedTables()" style="background-color: #17a2b8; margin-top: 10px; margin-left: 10px;">📋 查看保存的表格 | View Saved Tables</button>
                 </div>
                 
                 <!-- 编辑历史 -->
@@ -237,6 +245,34 @@
         </div>
     </div>
 
+    <!-- 保存的表格显示区域 -->
+    <div id="savedTablesArea" style="display: none;">
+        <div class="container">
+            <div id="savedTableNavigation" style="margin-bottom: 20px;">
+                <button type="button" onclick="closeSavedTableView()" style="background-color: #6c757d;">返回当前列表 | Back to Current List</button>
+                <span id="savedTableInfo" style="margin-left: 20px; font-weight: bold;"></span>
+            </div>
+            <table id="savedTableBody">
+                <thead>
+                    <tr>
+                        <th>商品名称 | Product Name</th>
+                        <th>数量 | Quantity</th>
+                        <th>单价 | Unit Price</th>
+                        <th>总价 | Total Price</th>
+                        <th>商品链接 | Product Link</th>
+                        <th>优先级 | Priority</th>
+                        <th>备注 | Notes</th>
+                        <th>添加人 | Added By</th>
+                        <th>添加时间 | Added At</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- 保存的表格数据将在这里显示 -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <script>
         let purchaseItems = []; // Array to store current purchase items
         let itemsForApproval = []; // Array to store items loaded from Excel for approval
@@ -245,7 +281,6 @@
         let currentUser = null;
         let onlineUsers = [];
         let editHistory = [];
-        let socket = null;
         let isCollaborationEnabled = false;
         let sharedPurchaseItems = []; // 共享的商品列表
         let sharedApprovalItems = []; // 共享的审核商品列表
@@ -257,21 +292,25 @@
         let nextUpdateDate = null; // 下次更新时间
         let isEditingEnabled = true; // 是否允许编辑
         
+        // 过往表格管理
+        let savedTables = []; // 保存的表格列表
+        let currentTableId = null; // 当前表格ID
+        
         // 实时同步配置
         let syncInterval = null;
         let lastSyncTime = 0;
-        const SYNC_INTERVAL = 1000; // 1秒同步一次
+        const SYNC_INTERVAL = 2000; // 2秒同步一次
 
         // 初始化协作功能
         function initializeCollaboration() {
             console.log('协作功能已初始化');
             isCollaborationEnabled = true;
             
-            // 初始化WebSocket连接（真实实现）
-            initializeWebSocket();
-            
             // 从localStorage加载共享数据
             loadSharedData();
+            
+            // 加载保存的表格
+            loadSavedTables();
             
             // 初始化共享数据
             if (sharedPurchaseItems.length === 0) {
@@ -307,96 +346,14 @@
             startRealTimeSync();
         }
 
-        // 初始化WebSocket连接（真实实现）
-        function initializeWebSocket() {
-            // 获取当前页面的端口，如果使用Node.js服务器则使用3000，否则使用当前端口
-            const currentPort = window.location.port;
-            const wsPort = currentPort === '3000' ? '3000' : '3000'; // 统一使用3000端口
-            const wsUrl = `ws://${window.location.hostname}:${wsPort}`;
-            console.log('正在连接WebSocket服务器 | Connecting to WebSocket server:', wsUrl);
-            
-            try {
-                socket = new WebSocket(wsUrl);
-                
-                socket.onopen = function() {
-                    console.log('WebSocket连接已建立 | WebSocket connection established');
-                    document.getElementById('syncStatus').innerHTML = '🟢 已连接 | Connected';
-                    document.getElementById('syncStatus').style.color = '#28a745';
-                    
-                    // 发送用户登录信息
-                    if (currentUser) {
-                        socket.send(JSON.stringify({
-                            type: 'user_login',
-                            user: currentUser
-                        }));
-                    }
-                };
-                
-                socket.onmessage = function(event) {
-                    try {
-                        const message = JSON.parse(event.data);
-                        console.log('收到WebSocket消息 | Received WebSocket message:', message.type);
-                        
-                        switch (message.type) {
-                            case 'init':
-                                // 初始化数据
-                                handleDataUpdate(JSON.stringify(message.data));
-                                break;
-                                
-                            case 'data_updated':
-                                // 数据更新
-                                handleDataUpdate(JSON.stringify(message.data));
-                                break;
-                                
-                            case 'user_joined':
-                                // 用户加入
-                                onlineUsers = message.onlineUsers;
-                                updateOnlineUsersDisplay();
-                                addEditHistory('用户加入 | User Joined', `${message.user.name} 加入了协作 | joined collaboration`);
-                                break;
-                                
-                            case 'user_left':
-                                // 用户离开
-                                onlineUsers = message.onlineUsers;
-                                updateOnlineUsersDisplay();
-                                addEditHistory('用户离开 | User Left', `${message.user.name} 离开了协作 | left collaboration`);
-                                break;
-                                
-                            case 'heartbeat_ack':
-                                // 心跳确认
-                                console.log('收到心跳确认 | Received heartbeat acknowledgment');
-                                break;
-                        }
-                    } catch (error) {
-                        console.error('解析WebSocket消息失败 | Failed to parse WebSocket message:', error);
-                    }
-                };
-                
-                socket.onclose = function() {
-                    console.log('WebSocket连接已关闭 | WebSocket connection closed');
-                    document.getElementById('syncStatus').innerHTML = '🔴 连接断开 | Disconnected';
-                    document.getElementById('syncStatus').style.color = '#dc3545';
-                    
-                    // 尝试重新连接
-                    setTimeout(() => {
-                        if (isCollaborationEnabled) {
-                            console.log('尝试重新连接WebSocket | Attempting to reconnect WebSocket');
-                            initializeWebSocket();
-                        }
-                    }, 5000);
-                };
-                
-                socket.onerror = function(error) {
-                    console.error('WebSocket连接错误 | WebSocket connection error:', error);
-                    document.getElementById('syncStatus').innerHTML = '🔴 连接错误 | Connection Error';
-                    document.getElementById('syncStatus').style.color = '#dc3545';
-                };
-                
-            } catch (error) {
-                console.error('创建WebSocket连接失败 | Failed to create WebSocket connection:', error);
-                document.getElementById('syncStatus').innerHTML = '🔴 连接失败 | Connection Failed';
-                document.getElementById('syncStatus').style.color = '#dc3545';
-            }
+        // 初始化localStorage同步
+        function initializeLocalStorageSync() {
+            // 监听storage事件以同步数据
+            window.addEventListener('storage', function(e) {
+                if (e.key === 'sharedPurchaseData' && e.newValue) {
+                    handleDataUpdate(e.newValue);
+                }
+            });
         }
 
         // 启动实时同步
@@ -418,9 +375,6 @@
             if (currentTime - lastSyncTime >= SYNC_INTERVAL) {
                 // 检查数据更新
                 checkForDataUpdates();
-                
-                // 广播心跳
-                broadcastHeartbeat();
                 
                 lastSyncTime = currentTime;
             }
@@ -470,20 +424,6 @@
             }
         }
 
-        // 广播心跳
-        function broadcastHeartbeat() {
-            if (currentUser && socket && socket.readyState === WebSocket.OPEN) {
-                const heartbeat = {
-                    type: 'heartbeat',
-                    user: currentUser.name,
-                    timestamp: Date.now()
-                };
-                
-                socket.send(JSON.stringify(heartbeat));
-                console.log('发送心跳 | Sent heartbeat:', heartbeat);
-            }
-        }
-
         // 用户登录
         function login() {
             const username = document.getElementById('username').value.trim();
@@ -501,14 +441,6 @@
                 onlineUsers.push(currentUser);
             }
             
-            // 通过WebSocket发送登录信息
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({
-                    type: 'user_login',
-                    user: currentUser
-                }));
-            }
-            
             // 实时同步用户状态
             if (isCollaborationEnabled) {
                 localStorage.setItem('onlineUsers', JSON.stringify(onlineUsers));
@@ -522,17 +454,9 @@
             updateOnlineUsersDisplay();
         }
 
-        // 用户退出
+        // 用户登出
         function logoutUser() {
             if (currentUser) {
-                // 通过WebSocket发送登出信息
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({
-                        type: 'user_logout',
-                        user: currentUser
-                    }));
-                }
-                
                 addEditHistory('用户退出 | User Logout', `${currentUser.name} 退出了协作 | left collaboration`);
                 onlineUsers = onlineUsers.filter(user => user.name !== currentUser.name);
                 currentUser = null;
@@ -611,7 +535,7 @@
             });
         }
 
-        // 更新共享商品列表状态显示
+        // 更新共享状态显示
         function updateSharedItemsStatus() {
             const sharedItemCount = document.getElementById('sharedItemCount');
             const purchaseItemCount = document.getElementById('purchaseItemCount');
@@ -620,46 +544,49 @@
             const lastUpdateTime = document.getElementById('lastUpdateTime');
             const collaborationStatus = document.getElementById('collaborationStatus');
             const syncStatus = document.getElementById('syncStatus');
-            
+            const savedTablesCount = document.getElementById('savedTablesCount');
+
             if (sharedItemCount) {
-                const totalItems = sharedPurchaseItems.length + sharedApprovalItems.length;
-                sharedItemCount.textContent = totalItems;
+                sharedItemCount.textContent = sharedPurchaseItems.length;
             }
-            
             if (purchaseItemCount) {
-                purchaseItemCount.textContent = sharedPurchaseItems.length;
+                purchaseItemCount.textContent = purchaseItems.length;
             }
-            
             if (approvalItemCount) {
-                approvalItemCount.textContent = sharedApprovalItems.length;
+                approvalItemCount.textContent = itemsForApproval.length;
             }
-            
             if (approvalFileNameDisplay) {
                 approvalFileNameDisplay.textContent = sharedApprovalFileName || '无';
             }
-            
             if (lastUpdateTime) {
-                lastUpdateTime.textContent = new Date().toLocaleTimeString();
+                const lastUpdate = localStorage.getItem('lastDataUpdate');
+                if (lastUpdate) {
+                    const date = new Date(parseInt(lastUpdate));
+                    lastUpdateTime.textContent = date.toLocaleString('zh-CN');
+                } else {
+                    lastUpdateTime.textContent = '-';
+                }
             }
-            
             if (collaborationStatus) {
                 if (isCollaborationEnabled && currentUser) {
-                    collaborationStatus.innerHTML = '🟢 已连接';
+                    collaborationStatus.innerHTML = '🟢 已启用 | Enabled';
                     collaborationStatus.style.color = '#28a745';
                 } else {
-                    collaborationStatus.innerHTML = '🔴 未连接';
+                    collaborationStatus.innerHTML = '🔴 未启用 | Disabled';
                     collaborationStatus.style.color = '#dc3545';
                 }
             }
-            
             if (syncStatus) {
                 if (isCollaborationEnabled && currentUser) {
-                    syncStatus.innerHTML = '🟢 已连接';
+                    syncStatus.innerHTML = '🔄 同步中 | Syncing';
                     syncStatus.style.color = '#28a745';
                 } else {
-                    syncStatus.innerHTML = '🔴 连接断开';
-                    syncStatus.style.color = '#dc3545';
+                    syncStatus.innerHTML = '⏸️ 已暂停 | Paused';
+                    syncStatus.style.color = '#ffc107';
                 }
+            }
+            if (savedTablesCount) {
+                savedTablesCount.textContent = savedTables.length;
             }
         }
 
@@ -1377,7 +1304,7 @@
             }
         }
 
-        // 保存共享数据到WebSocket服务器
+        // 保存共享数据到localStorage
         function saveSharedData() {
             const sharedData = {
                 purchaseItems: sharedPurchaseItems,
@@ -1388,20 +1315,18 @@
             };
             
             try {
-                // 通过WebSocket发送数据
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({
-                        type: 'update_data',
-                        data: sharedData,
-                        user: currentUser?.name || 'Unknown'
-                    }));
-                    console.log('数据已通过WebSocket发送 | Data sent via WebSocket:', sharedData);
-                } else {
-                    console.warn('WebSocket未连接，使用localStorage作为备用 | WebSocket not connected, using localStorage as fallback');
-                    // 备用方案：使用localStorage
-                    localStorage.setItem('sharedPurchaseData', JSON.stringify(sharedData));
-                    localStorage.setItem('lastDataUpdate', sharedData.lastUpdate.toString());
-                }
+                localStorage.setItem('sharedPurchaseData', JSON.stringify(sharedData));
+                localStorage.setItem('lastDataUpdate', sharedData.lastUpdate.toString());
+                
+                // 触发storage事件以通知其他标签页
+                window.dispatchEvent(new StorageEvent('storage', {
+                    key: 'sharedPurchaseData',
+                    newValue: JSON.stringify(sharedData),
+                    oldValue: localStorage.getItem('sharedPurchaseData'),
+                    storageArea: localStorage
+                }));
+                
+                console.log('共享数据已保存并广播 | Shared data saved and broadcasted:', sharedData);
             } catch (error) {
                 console.error('保存共享数据失败 | Failed to save shared data:', error);
             }
@@ -1534,6 +1459,126 @@
             document.getElementById('totalPriceDisplay').textContent = '0.00';
         }
 
+        // 加载保存的表格
+        function loadSavedTables() {
+            try {
+                const savedTablesStr = localStorage.getItem('savedTables');
+                if (savedTablesStr) {
+                    savedTables = JSON.parse(savedTablesStr);
+                    console.log('已加载保存的表格 | Loaded saved tables:', savedTables.length);
+                }
+            } catch (error) {
+                console.error('加载保存的表格失败 | Failed to load saved tables:', error);
+            }
+        }
+
+        // 保存当前表格
+        function saveCurrentTable() {
+            if (purchaseItems.length === 0) {
+                alert('没有商品可以保存 | No items to save');
+                return;
+            }
+
+            const tableName = prompt('请输入表格名称 | Please enter table name:', `采购清单_${new Date().toLocaleDateString()}`);
+            if (!tableName) return;
+
+            const tableData = {
+                id: Date.now(),
+                name: tableName,
+                items: [...purchaseItems],
+                createdBy: currentUser?.name || 'Unknown',
+                createdAt: new Date().toLocaleString('zh-CN'),
+                totalItems: purchaseItems.length,
+                totalValue: purchaseItems.reduce((sum, item) => sum + item.total, 0)
+            };
+
+            savedTables.unshift(tableData);
+            localStorage.setItem('savedTables', JSON.stringify(savedTables));
+
+            addEditHistory('保存表格 | Save Table', `${currentUser?.name || 'Unknown'} 保存了表格 | saved table: ${tableName}`);
+            alert(`表格已保存 | Table saved: ${tableName}`);
+        }
+
+        // 查看保存的表格
+        function viewSavedTables() {
+            if (savedTables.length === 0) {
+                alert('暂无保存的表格 | No saved tables');
+                return;
+            }
+
+            let tableList = '请选择要查看的表格 | Please select a table to view:\n\n';
+            savedTables.forEach((table, index) => {
+                const totalValue = table.totalValue.toFixed(2);
+                tableList += `${index + 1}. ${table.name} (${table.totalItems}个商品 | items, 总价值 | total value: ${totalValue}元)\n`;
+            });
+
+            const choice = prompt(tableList + '\n请输入序号 | Enter number (1-' + savedTables.length + '):');
+            const selectedIndex = parseInt(choice) - 1;
+
+            if (selectedIndex >= 0 && selectedIndex < savedTables.length) {
+                displaySavedTable(selectedIndex);
+            }
+        }
+
+        // 显示保存的表格
+        function displaySavedTable(index) {
+            const table = savedTables[index];
+            
+            // 更新表格信息显示
+            document.getElementById('savedTableInfo').textContent = 
+                `表格名称 | Table Name: ${table.name} | 商品数量 | Items: ${table.totalItems} | 总价值 | Total Value: ${table.totalValue.toFixed(2)}元 | 创建人 | Created By: ${table.createdBy} | 创建时间 | Created At: ${table.createdAt}`;
+            
+            // 渲染表格
+            const tbody = document.getElementById('savedTableBody').getElementsByTagName('tbody')[0];
+            tbody.innerHTML = '';
+            
+            table.items.forEach(item => {
+                const row = tbody.insertRow();
+                row.insertCell().textContent = item.name;
+                row.insertCell().textContent = item.quantity;
+                row.insertCell().textContent = item.price.toFixed(2);
+                row.insertCell().textContent = item.total.toFixed(2);
+                row.insertCell().textContent = item.link;
+                row.insertCell().textContent = item.priority;
+                row.insertCell().textContent = item.notes;
+                row.insertCell().textContent = item.addedBy;
+                row.insertCell().textContent = item.addedAt;
+            });
+            
+            // 显示保存的表格区域
+            document.getElementById('savedTablesArea').style.display = 'block';
+            document.getElementById('purchaseForm').parentElement.style.display = 'none';
+            document.getElementById('currentItemsTable').parentElement.style.display = 'none';
+            document.getElementById('approvalArea').parentElement.style.display = 'none';
+        }
+
+        // 关闭保存的表格视图
+        function closeSavedTableView() {
+            document.getElementById('savedTablesArea').style.display = 'none';
+            document.getElementById('purchaseForm').parentElement.style.display = 'block';
+            document.getElementById('currentItemsTable').parentElement.style.display = 'block';
+            if (document.getElementById('approvalArea').style.display !== 'none') {
+                document.getElementById('approvalArea').parentElement.style.display = 'block';
+            }
+        }
+
+        // 删除保存的表格
+        function deleteSavedTable(index) {
+            if (confirm('确定要删除这个表格吗？ | Are you sure you want to delete this table?')) {
+                const deletedTable = savedTables[index];
+                savedTables.splice(index, 1);
+                localStorage.setItem('savedTables', JSON.stringify(savedTables));
+                
+                addEditHistory('删除表格 | Delete Table', `${currentUser?.name || 'Unknown'} 删除了表格 | deleted table: ${deletedTable.name}`);
+                alert(`表格已删除 | Table deleted: ${deletedTable.name}`);
+                
+                // 如果当前正在查看被删除的表格，关闭视图
+                if (document.getElementById('savedTablesArea').style.display === 'block') {
+                    closeSavedTableView();
+                }
+            }
+        }
+
         // 页面加载完成后的初始化
         document.addEventListener('DOMContentLoaded', function() {
             console.log('页面加载完成，开始初始化...');
@@ -1552,6 +1597,9 @@
             
             // 初始化协作功能
             initializeCollaboration();
+            
+            // 初始化localStorage同步
+            initializeLocalStorageSync();
             
             // 加载在线用户
             const savedUsers = localStorage.getItem('onlineUsers');

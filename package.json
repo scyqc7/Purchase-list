@@ -1,25 +1,30 @@
 {
   "name": "purchase-list-collaboration",
-  "version": "1.0.0",
-  "description": "Multi-user collaborative purchase list management system",
-  "main": "server.js",
+  "version": "2.0.0",
+  "description": "多用户采购清单管理系统 - Netlify部署版本",
+  "main": "index.html",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "ws": "^8.14.2"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
+    "start": "echo '这是一个静态网站，请使用HTTP服务器运行'",
+    "dev": "echo '请使用以下命令之一启动本地服务器：' && echo 'python -m http.server 8000' && echo 'npx http-server' && echo '或使用VS Code Live Server扩展'",
+    "build": "echo '静态网站，无需构建'",
+    "deploy": "echo '请将代码推送到GitHub，然后在Netlify中部署'"
   },
   "keywords": [
     "purchase",
+    "list",
     "collaboration",
-    "websocket",
-    "real-time"
+    "excel",
+    "localStorage",
+    "netlify"
   ],
   "author": "Your Name",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/purchase-list-collaboration.git"
+  },
+  "homepage": "https://your-app-name.netlify.app",
+  "engines": {
+    "node": ">=14.0.0"
+  }
 }
