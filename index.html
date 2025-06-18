@@ -134,8 +134,8 @@
             <label for="itemPrice">单价 (元) | Unit Price (CNY):</label>
             <input type="number" id="itemPrice" step="0.01" min="0" required>
 
-            <label for="itemSupplier">供应商 | Supplier:</label>
-            <input type="text" id="itemSupplier" required>
+            <label for="itemLink">商品链接 | Product Link:</label>
+            <input type="url" id="itemLink" placeholder="请输入商品链接 | Please enter product link">
 
             <label for="itemPriority">优先级 | Priority:</label>
             <select id="itemPriority">
@@ -159,7 +159,7 @@
                     <th>商品名称 | Product Name</th>
                     <th>数量 | Quantity</th>
                     <th>单价 | Unit Price</th>
-                    <th>供应商 | Supplier</th>
+                    <th>商品链接 | Product Link</th>
                     <th>优先级 | Priority</th>
                     <th>备注 | Notes</th>
                     <th>添加人 | Added By</th>
@@ -217,7 +217,7 @@
                         <th>商品名称 | Product Name</th>
                         <th>数量 | Quantity</th>
                         <th>单价 | Unit Price</th>
-                        <th>供应商 | Supplier</th>
+                        <th>商品链接 | Product Link</th>
                         <th>优先级 | Priority</th>
                         <th>备注 | Notes</th>
                         <th>添加人 | Added By</th>
@@ -650,7 +650,7 @@
             const name = document.getElementById('itemName').value.trim();
             const quantity = parseInt(document.getElementById('itemQuantity').value) || 0;
             const price = parseFloat(document.getElementById('itemPrice').value) || 0;
-            const supplier = document.getElementById('itemSupplier').value.trim();
+            const link = document.getElementById('itemLink').value.trim();
             const priority = document.getElementById('itemPriority').value;
             const notes = document.getElementById('itemNotes').value.trim();
 
@@ -669,8 +669,8 @@
                 return;
             }
 
-            if (!supplier) {
-                alert('请输入供应商信息 | Please enter supplier information');
+            if (!link) {
+                alert('请输入商品链接 | Please enter product link');
                 return;
             }
 
@@ -679,7 +679,7 @@
                 name: name,
                 quantity: quantity,
                 price: price,
-                supplier: supplier,
+                link: link,
                 priority: priority,
                 notes: notes,
                 addedBy: currentUser?.name || 'Unknown',
@@ -804,7 +804,7 @@
                 row.insertCell().textContent = item.name;
                 row.insertCell().textContent = item.quantity;
                 row.insertCell().textContent = item.price.toFixed(2);
-                row.insertCell().textContent = item.supplier;
+                row.insertCell().textContent = item.link;
                 row.insertCell().textContent = item.priority;
                 row.insertCell().textContent = item.notes;
                 row.insertCell().textContent = item.addedBy;
@@ -1071,7 +1071,7 @@
                 row.insertCell().textContent = item.name;
                 row.insertCell().textContent = item.quantity;
                 row.insertCell().textContent = item.price.toFixed(2);
-                row.insertCell().textContent = item.supplier;
+                row.insertCell().textContent = item.link;
                 row.insertCell().textContent = item.priority;
                 row.insertCell().textContent = item.notes;
                 row.insertCell().textContent = item.addedBy;
@@ -1275,7 +1275,7 @@
             document.getElementById('itemName').value = '';
             document.getElementById('itemQuantity').value = '';
             document.getElementById('itemPrice').value = '';
-            document.getElementById('itemSupplier').value = '';
+            document.getElementById('itemLink').value = '';
             document.getElementById('itemPriority').value = 'medium';
             document.getElementById('itemNotes').value = '';
         }
