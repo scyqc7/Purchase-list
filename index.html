@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>采购单自动填写与审核 - 多人在线协作版</title>
+    <title>采购单自动填写与审核 - 多人在线协作版 | Purchase Order Management System - Multi-user Collaboration</title>
     <!-- SheetJS library for Excel generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- Socket.IO for real-time collaboration -->
@@ -69,106 +69,106 @@
 </head>
 <body>
     <div class="container">
-        <h1>采购单填写 - 多人在线协作版</h1>
+        <h1>采购单填写 - 多人在线协作版 | Purchase Order - Multi-user Collaboration</h1>
         
         <!-- 多人在线协作面板 -->
         <div class="collaboration-panel">
-            <h3>🔄 多人在线协作</h3>
+            <h3>🔄 多人在线协作 | Multi-user Online Collaboration</h3>
             
             <!-- 用户登录区域 -->
             <div id="loginArea">
-                <label for="userName">您的姓名:</label>
-                <input type="text" id="userName" placeholder="请输入您的姓名" style="width: 200px; margin-right: 10px;">
-                <button type="button" onclick="loginUser()">加入协作</button>
+                <label for="userName">您的姓名 | Your Name:</label>
+                <input type="text" id="userName" placeholder="请输入您的姓名 | Please enter your name" style="width: 200px; margin-right: 10px;">
+                <button type="button" onclick="loginUser()">加入协作 | Join Collaboration</button>
             </div>
             
             <!-- 在线用户显示 -->
             <div id="onlineUsersArea" style="display: none;">
-                <h4>👥 在线用户 (<span id="userCount">0</span>)</h4>
+                <h4>👥 在线用户 | Online Users (<span id="userCount">0</span>)</h4>
                 <div id="onlineUsers" class="online-users">
                     <!-- 在线用户将在这里显示 -->
                 </div>
                 
                 <!-- 共享商品列表状态 -->
-                <h4>📦 共享商品列表状态</h4>
+                <h4>📦 共享商品列表状态 | Shared Items Status</h4>
                 <div id="sharedItemsStatus" style="background: white; border: 1px solid #ddd; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
-                    <div>当前共享商品数量: <strong id="sharedItemCount">0</strong> 个</div>
-                    <div>采购商品: <span id="purchaseItemCount">0</span> 个</div>
-                    <div>审核商品: <span id="approvalItemCount">0</span> 个</div>
-                    <div>审核文件: <span id="approvalFileNameDisplay">无</span></div>
-                    <div>最后更新时间: <span id="lastUpdateTime">-</span></div>
-                    <div>协作状态: <span id="collaborationStatus" style="color: #28a745;">🟢 已连接</span></div>
-                    <div>同步状态: <span id="syncStatus" style="color: #28a745;">🔄 实时同步中</span></div>
+                    <div>当前共享商品数量 | Current Shared Items: <strong id="sharedItemCount">0</strong> 个</div>
+                    <div>采购商品 | Purchase Items: <span id="purchaseItemCount">0</span> 个</div>
+                    <div>审核商品 | Approval Items: <span id="approvalItemCount">0</span> 个</div>
+                    <div>审核文件 | Approval File: <span id="approvalFileNameDisplay">无</span></div>
+                    <div>最后更新时间 | Last Update: <span id="lastUpdateTime">-</span></div>
+                    <div>协作状态 | Collaboration Status: <span id="collaborationStatus" style="color: #28a745;">🟢 已连接</span></div>
+                    <div>同步状态 | Sync Status: <span id="syncStatus" style="color: #28a745;">🔄 实时同步中</span></div>
                 </div>
                 
                 <!-- 采购周期管理 -->
-                <h4>📅 采购周期管理</h4>
+                <h4>📅 采购周期管理 | Purchase Cycle Management</h4>
                 <div id="periodStatus" style="background: white; border: 1px solid #ddd; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
-                    <div>当前周期开始: <span id="currentPeriodStart">-</span></div>
-                    <div>下次更新时间: <span id="nextUpdateDate">-</span></div>
-                    <div>编辑状态: <span id="editingStatus" style="color: #28a745;">🟢 允许编辑</span></div>
-                    <div>历史记录数量: <span id="historyCount">0</span> 个周期</div>
-                    <button type="button" onclick="viewPurchaseHistory()" style="background-color: #17a2b8; margin-top: 10px;">📋 查看历史采购列表</button>
-                    <button type="button" onclick="forceUpdatePeriod()" style="background-color: #ffc107; color: black; margin-top: 10px; margin-left: 10px;">🔄 强制更新周期</button>
+                    <div>当前周期开始 | Current Period Start: <span id="currentPeriodStart">-</span></div>
+                    <div>下次更新时间 | Next Update Date: <span id="nextUpdateDate">-</span></div>
+                    <div>编辑状态 | Edit Status: <span id="editingStatus" style="color: #28a745;">🟢 允许编辑</span></div>
+                    <div>历史记录数量 | History Records: <span id="historyCount">0</span> 个周期</div>
+                    <button type="button" onclick="viewPurchaseHistory()" style="background-color: #17a2b8; margin-top: 10px;">📋 查看历史采购列表 | View History</button>
+                    <button type="button" onclick="forceUpdatePeriod()" style="background-color: #ffc107; color: black; margin-top: 10px; margin-left: 10px;">🔄 强制更新周期 | Force Update</button>
                 </div>
                 
                 <!-- 编辑历史 -->
-                <h4>📝 编辑历史</h4>
+                <h4>📝 编辑历史 | Edit History</h4>
                 <div id="editHistory" class="edit-history">
                     <!-- 编辑记录将在这里显示 -->
                 </div>
                 
-                <button type="button" onclick="logoutUser()" style="background-color: #dc3545;">退出协作</button>
+                <button type="button" onclick="logoutUser()" style="background-color: #dc3545;">退出协作 | Logout</button>
             </div>
         </div>
         
         <form id="purchaseForm">
-            <label for="fillerName">填写人:</label>
+            <label for="fillerName">填写人 | Filler Name:</label>
             <input type="text" id="fillerName" required>
 
-            <label for="fillerEmail">填写人邮箱:</label>
+            <label for="fillerEmail">填写人邮箱 | Filler Email:</label>
             <input type="email" id="fillerEmail" required>
 
-            <label for="productLink">商品链接 (粘贴后请手动填写下方信息):</label>
+            <label for="productLink">商品链接 | Product Link (粘贴后请手动填写下方信息 | Paste and manually fill in the information below):</label>
             <input type="url" id="productLink">
-            <small>注意: 自动从链接获取信息功能复杂, 此处仅保存链接, 请手动填写商品详情。</small>
+            <small>注意 | Note: 自动从链接获取信息功能复杂, 此处仅保存链接, 请手动填写商品详情 | Auto-fetching from links is complex, only saves the link here, please manually fill in product details.</small>
 
-            <label for="productName">名称:</label>
+            <label for="productName">名称 | Product Name:</label>
             <input type="text" id="productName" required>
 
-            <label for="productModel">型号:</label>
+            <label for="productModel">型号 | Model:</label>
             <input type="text" id="productModel">
 
-            <label for="quantity">数量:</label>
+            <label for="quantity">数量 | Quantity:</label>
             <input type="number" id="quantity" min="1" required>
 
-            <label for="unitPrice">单价 (元):</label>
+            <label for="unitPrice">单价 (元) | Unit Price (CNY):</label>
             <input type="number" id="unitPrice" step="0.01" min="0" required>
 
-            <label for="remarks">商品备注:</label>
+            <label for="remarks">商品备注 | Product Remarks:</label>
             <input type="text" id="remarks">
 
-            <div>总价: <span id="totalPriceDisplay">0.00</span> 元</div>
+            <div>总价 | Total Price: <span id="totalPriceDisplay">0.00</span> 元</div>
 
-            <button type="button" onclick="addItem()">添加商品</button>
-            <button type="button" onclick="generateExcel()">生成采购单 (Excel)</button>
-            <button type="button" onclick="clearCurrentItems()">清空当前列表</button>
+            <button type="button" onclick="addItem()">添加商品 | Add Item</button>
+            <button type="button" onclick="generateExcel()">生成采购单 (Excel) | Generate Purchase Order (Excel)</button>
+            <button type="button" onclick="clearCurrentItems()">清空当前列表 | Clear Current List</button>
         </form>
 
-        <h2>当前待采购商品列表</h2>
+        <h2>当前待采购商品列表 | Current Purchase Items List</h2>
         <table id="currentItemsTable">
             <thead>
                 <tr>
-                    <th>填写人</th>
-                    <th>邮箱</th>
-                    <th>名称</th>
-                    <th>型号</th>
-                    <th>数量</th>
-                    <th>单价</th>
-                    <th>链接</th>
-                    <th>总价</th>
-                    <th>备注</th>
-                    <th>操作</th>
+                    <th>填写人 | Filler Name</th>
+                    <th>邮箱 | Email</th>
+                    <th>名称 | Product Name</th>
+                    <th>型号 | Model</th>
+                    <th>数量 | Quantity</th>
+                    <th>单价 | Unit Price</th>
+                    <th>链接 | Link</th>
+                    <th>总价 | Total Price</th>
+                    <th>备注 | Remarks</th>
+                    <th>操作 | Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -177,56 +177,56 @@
         </table>
 
         <div class="section">
-            <h2>采购单审核</h2>
-            <p>上传需要审核的采购单 Excel 文件 (通常是之前生成的以日期命名的文件)。</p>
-            <label for="excelFileToApprove">选择Excel文件进行审核:</label>
+            <h2>采购单审核 | Purchase Order Approval</h2>
+            <p>上传需要审核的采购单 Excel 文件 | Upload Excel file for approval (通常是之前生成的以日期命名的文件 | usually previously generated files with date names)。</p>
+            <label for="excelFileToApprove">选择Excel文件进行审核 | Select Excel file for approval:</label>
             <input type="file" id="excelFileToApprove" accept=".xlsx, .xls">
-            <button type="button" onclick="loadExcelForApproval()">加载并显示待审核项</button>
+            <button type="button" onclick="loadExcelForApproval()">加载并显示待审核项 | Load and Display Items for Approval</button>
 
             <div id="approvalArea" style="display:none;">
-                <h3>待审核商品: <span id="approvalFileName"></span></h3>
+                <h3>待审核商品 | Items for Approval: <span id="approvalFileName"></span></h3>
                 <table id="approvalTable">
                     <thead>
                         <tr>
-                            <th>审核 (勾选为同意)</th>
-                            <th>填写人</th>
-                            <th>邮箱</th>
-                            <th>名称</th>
-                            <th>型号</th>
-                            <th>数量</th>
-                            <th>单价</th>
-                            <th>链接</th>
-                            <th>总价</th>
-                            <th>备注</th>
+                            <th>审核 (勾选为同意) | Approval (Check to Approve)</th>
+                            <th>填写人 | Filler Name</th>
+                            <th>邮箱 | Email</th>
+                            <th>名称 | Product Name</th>
+                            <th>型号 | Model</th>
+                            <th>数量 | Quantity</th>
+                            <th>单价 | Unit Price</th>
+                            <th>链接 | Link</th>
+                            <th>总价 | Total Price</th>
+                            <th>备注 | Remarks</th>
                         </tr>
                     </thead>
                     <tbody>
                         <!-- Approval items will be loaded here -->
                     </tbody>
                 </table>
-                <button type="button" onclick="generateApprovedExcel()">生成审核通过的采购单</button>
+                <button type="button" onclick="generateApprovedExcel()">生成审核通过的采购单 | Generate Approved Purchase Order</button>
             </div>
         </div>
 
         <!-- 历史采购列表显示区域 -->
         <div id="historyArea" style="display: none;" class="section">
-            <h2>📋 历史采购列表</h2>
+            <h2>📋 历史采购列表 | Purchase History</h2>
             <div id="historyNavigation" style="margin-bottom: 20px;">
-                <button type="button" onclick="closeHistoryView()" style="background-color: #6c757d;">返回当前列表</button>
+                <button type="button" onclick="closeHistoryView()" style="background-color: #6c757d;">返回当前列表 | Back to Current List</button>
                 <span id="historyPeriodInfo" style="margin-left: 20px; font-weight: bold;"></span>
             </div>
             <table id="historyTable">
                 <thead>
                     <tr>
-                        <th>填写人</th>
-                        <th>邮箱</th>
-                        <th>名称</th>
-                        <th>型号</th>
-                        <th>数量</th>
-                        <th>单价</th>
-                        <th>链接</th>
-                        <th>总价</th>
-                        <th>备注</th>
+                        <th>填写人 | Filler Name</th>
+                        <th>邮箱 | Email</th>
+                        <th>名称 | Product Name</th>
+                        <th>型号 | Model</th>
+                        <th>数量 | Quantity</th>
+                        <th>单价 | Unit Price</th>
+                        <th>链接 | Link</th>
+                        <th>总价 | Total Price</th>
+                        <th>备注 | Remarks</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -303,7 +303,7 @@
         function loginUser() {
             const userName = document.getElementById('userName').value.trim();
             if (!userName) {
-                alert('请输入您的姓名');
+                alert('请输入您的姓名 | Please enter your name');
                 return;
             }
             
@@ -324,7 +324,7 @@
             updateOnlineUsersDisplay();
             
             // 添加登录记录
-            addEditHistory('用户登录', `${userName} 加入了协作`);
+            addEditHistory('用户登录 | User Login', `${userName} 加入了协作 | joined collaboration`);
             
             // 初始化协作
             initializeCollaboration();
@@ -333,7 +333,7 @@
         // 用户退出
         function logoutUser() {
             if (currentUser) {
-                addEditHistory('用户退出', `${currentUser.name} 退出了协作`);
+                addEditHistory('用户退出 | User Logout', `${currentUser.name} 退出了协作 | left collaboration`);
                 onlineUsers = onlineUsers.filter(user => user.id !== currentUser.id);
                 currentUser = null;
                 
@@ -548,7 +548,7 @@
         function addItem() {
             // 检查编辑权限
             if (!isEditingEnabled) {
-                alert('当前采购周期已结束，不允许添加新商品。请等待下一个周期或联系管理员。');
+                alert('当前采购周期已结束，不允许添加新商品。请等待下一个周期或联系管理员。 | Current purchase cycle has ended, adding new items is not allowed. Please wait for the next cycle or contact administrator.');
                 return;
             }
             
@@ -562,7 +562,7 @@
             const remarks = document.getElementById('remarks').value.trim();
 
             if (!fillerName || !fillerEmail || !productName || isNaN(quantity) || quantity <= 0 || isNaN(unitPrice) || unitPrice < 0) {
-                alert('请填写所有必填项 (填写人, 邮箱, 名称, 数量, 单价) 并确保数值有效。');
+                alert('请填写所有必填项 (填写人, 邮箱, 名称, 数量, 单价) 并确保数值有效。 | Please fill in all required fields (Filler Name, Email, Product Name, Quantity, Unit Price) and ensure values are valid.');
                 return;
             }
 
@@ -590,7 +590,7 @@
             
             // 添加编辑记录
             if (currentUser) {
-                addEditHistory('添加商品', `${productName} (数量: ${quantity}, 单价: ${unitPrice}元)`);
+                addEditHistory('添加商品 | Add Item', `${productName} (数量 | quantity: ${quantity}, 单价 | unit price: ${unitPrice}元)`);
             }
         }
 
@@ -598,11 +598,11 @@
         function removeItem(index) {
             // 检查编辑权限
             if (!isEditingEnabled) {
-                alert('当前采购周期已结束，不允许修改商品。请等待下一个周期或联系管理员。');
+                alert('当前采购周期已结束，不允许修改商品。请等待下一个周期或联系管理员。 | Current purchase cycle has ended, modifying items is not allowed. Please wait for the next cycle or contact administrator.');
                 return;
             }
             
-            if (confirm('确定要移除此商品吗?')) {
+            if (confirm('确定要移除此商品吗? | Are you sure to remove this item?')) {
                 const removedItem = purchaseItems[index];
                 purchaseItems.splice(index, 1);
                 renderCurrentItemsTable();
@@ -612,7 +612,7 @@
                 
                 // 添加编辑记录
                 if (currentUser) {
-                    addEditHistory('移除商品', `${removedItem["名称"]} (原填写人: ${removedItem["填写人"]})`);
+                    addEditHistory('移除商品 | Remove Item', `${removedItem["名称"]} (原填写人 | original filler: ${removedItem["填写人"]})`);
                 }
             }
         }
@@ -621,11 +621,11 @@
         function clearCurrentItems() {
             // 检查编辑权限
             if (!isEditingEnabled) {
-                alert('当前采购周期已结束，不允许清空列表。请等待下一个周期或联系管理员。');
+                alert('当前采购周期已结束，不允许清空列表。请等待下一个周期或联系管理员。 | Current purchase cycle has ended, clearing the list is not allowed. Please wait for the next cycle or contact administrator.');
                 return;
             }
             
-            if (confirm('确定要清空当前所有待采购商品吗? 这将清除列表但不会影响已生成的Excel文件。')) {
+            if (confirm('确定要清空当前所有待采购商品吗? 这将清除列表但不会影响已生成的Excel文件。 | Are you sure to clear all current purchase items? This will clear the list but won\'t affect generated Excel files.')) {
                 const itemCount = purchaseItems.length;
                 purchaseItems = [];
                 renderCurrentItemsTable();
@@ -635,7 +635,7 @@
                 
                 // 添加编辑记录
                 if (currentUser) {
-                    addEditHistory('清空列表', `清空了 ${itemCount} 个商品`);
+                    addEditHistory('清空列表 | Clear List', `清空了 | cleared ${itemCount} 个商品 | items`);
                 }
             }
         }
@@ -643,7 +643,7 @@
         // 增强的生成Excel功能
         function generateExcel() {
             if (purchaseItems.length === 0) {
-                alert('没有可导出的商品。请先添加商品。');
+                alert('没有可导出的商品。请先添加商品。 | No items to export. Please add items first.');
                 return;
             }
 
@@ -659,11 +659,11 @@
             const fileName = `采购单_${dateString}.xlsx`;
 
             XLSX.writeFile(workbook, fileName);
-            alert(`采购单 "${fileName}" 已生成并开始下载。\n请注意：当前列表中的商品已导出。如需开始新的采购周期，建议先"清空当前列表"。`);
+            alert(`采购单 "${fileName}" 已生成并开始下载。\n请注意：当前列表中的商品已导出。如需开始新的采购周期，建议先"清空当前列表"。 | Purchase order "${fileName}" has been generated and download started.\nNote: Current items have been exported. To start a new purchase cycle, it's recommended to "Clear Current List" first.`);
             
             // 添加编辑记录
             if (currentUser) {
-                addEditHistory('导出Excel', `导出了 ${purchaseItems.length} 个商品到 ${fileName}`);
+                addEditHistory('导出Excel | Export Excel', `导出了 | exported ${purchaseItems.length} 个商品到 | items to ${fileName}`);
             }
         }
 
@@ -706,11 +706,11 @@
         function loadExcelForApproval() {
             const fileInput = document.getElementById('excelFileToApprove');
             if (fileInput.files.length === 0) {
-                alert('请先选择一个Excel文件。');
+                alert('请先选择一个Excel文件。 | Please select an Excel file first.');
                 return;
             }
             const file = fileInput.files[0];
-            document.getElementById('approvalFileName').textContent = `(文件: ${file.name})`;
+            document.getElementById('approvalFileName').textContent = `(文件 | file: ${file.name})`;
 
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -730,17 +730,17 @@
                     
                     // 添加编辑记录
                     if (currentUser) {
-                        addEditHistory('上传审核文件', `上传了 ${file.name} 进行审核 (${itemsForApproval.length} 个商品)`);
+                        addEditHistory('上传审核文件 | Upload Approval File', `上传了 | uploaded ${file.name} 进行审核 | for approval (${itemsForApproval.length} 个商品 | items)`);
                     }
                 } catch (error) {
                     console.error("Error reading Excel file:", error);
-                    alert("无法读取或解析Excel文件。请确保文件格式正确且未损坏。\n错误: " + error.message);
+                    alert("无法读取或解析Excel文件。请确保文件格式正确且未损坏。\n错误 | Error: " + error.message + "\nUnable to read or parse Excel file. Please ensure the file format is correct and not corrupted.");
                     document.getElementById('approvalArea').style.display = 'none';
                 }
             };
             reader.onerror = function(e) {
                 console.error("FileReader error:", e);
-                alert("读取文件时发生错误。");
+                alert("读取文件时发生错误。 | Error occurred while reading file.");
                 document.getElementById('approvalArea').style.display = 'none';
             };
             reader.readAsArrayBuffer(file);
@@ -797,7 +797,7 @@
             });
 
             if (approvedItems.length === 0) {
-                alert('没有勾选任何审核通过的商品。');
+                alert('没有勾选任何审核通过的商品。 | No approved items selected.');
                 return;
             }
 
@@ -813,11 +813,11 @@
             const fileName = `${originalFileName}_审核通过_${dateString}.xlsx`;
 
             XLSX.writeFile(workbook, fileName);
-            alert(`审核通过的采购单 "${fileName}" 已生成并开始下载。`);
+            alert(`审核通过的采购单 "${fileName}" 已生成并开始下载。 | Approved purchase order "${fileName}" has been generated and download started.`);
             
             // 添加编辑记录
             if (currentUser) {
-                addEditHistory('生成审核Excel', `生成了审核通过的Excel文件: ${fileName} (${approvedItems.length} 个商品)`);
+                addEditHistory('生成审核Excel | Generate Approval Excel', `生成了审核通过的Excel文件 | generated approved Excel file: ${fileName} (${approvedItems.length} 个商品 | items)`);
             }
         }
 
@@ -867,7 +867,7 @@
                 
                 // 添加编辑记录
                 if (currentUser) {
-                    addEditHistory('周期更新', `保存了 ${purchaseItems.length} 个商品到历史记录`);
+                    addEditHistory('周期更新 | Cycle Update', `保存了 | saved ${purchaseItems.length} 个商品到历史记录 | items to history`);
                 }
             }
             
@@ -892,10 +892,10 @@
 
         // 强制更新周期
         function forceUpdatePeriod() {
-            if (confirm('确定要强制更新采购周期吗？当前的商品列表将被保存到历史记录中。')) {
+            if (confirm('确定要强制更新采购周期吗？当前的商品列表将被保存到历史记录中。 | Are you sure to force update the purchase cycle? Current items will be saved to history.')) {
                 updatePurchasePeriod();
                 if (currentUser) {
-                    addEditHistory('强制更新周期', '管理员强制更新了采购周期');
+                    addEditHistory('强制更新周期 | Force Update Cycle', '管理员强制更新了采购周期 | Admin forced cycle update');
                 }
             }
         }
@@ -916,20 +916,20 @@
         // 查看历史采购列表
         function viewPurchaseHistory() {
             if (purchaseHistory.length === 0) {
-                alert('暂无历史采购记录');
+                alert('暂无历史采购记录 | No purchase history records');
                 return;
             }
             
             // 显示历史记录选择界面
-            let historyOptions = '请选择要查看的历史周期：\n\n';
+            let historyOptions = '请选择要查看的历史周期 | Please select a history period to view:\n\n';
             purchaseHistory.forEach((record, index) => {
                 const startDate = record.periodStart.toLocaleDateString();
                 const endDate = record.periodEnd.toLocaleDateString();
                 const totalValue = record.totalValue.toFixed(2);
-                historyOptions += `${index + 1}. ${startDate} - ${endDate} (${record.totalItems}个商品, 总价值: ${totalValue}元)\n`;
+                historyOptions += `${index + 1}. ${startDate} - ${endDate} (${record.totalItems}个商品 | items, 总价值 | total value: ${totalValue}元)\n`;
             });
             
-            const choice = prompt(historyOptions + '\n请输入序号 (1-' + purchaseHistory.length + '):');
+            const choice = prompt(historyOptions + '\n请输入序号 | Enter number (1-' + purchaseHistory.length + '):');
             const selectedIndex = parseInt(choice) - 1;
             
             if (selectedIndex >= 0 && selectedIndex < purchaseHistory.length) {
@@ -945,7 +945,7 @@
             
             // 更新历史信息显示
             document.getElementById('historyPeriodInfo').textContent = 
-                `周期: ${startDate} - ${endDate} | 商品数量: ${record.totalItems} | 总价值: ${record.totalValue.toFixed(2)}元`;
+                `周期 | Period: ${startDate} - ${endDate} | 商品数量 | Items: ${record.totalItems} | 总价值 | Total Value: ${record.totalValue.toFixed(2)}元`;
             
             // 渲染历史表格
             const tbody = document.getElementById('historyTable').getElementsByTagName('tbody')[0];
