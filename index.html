@@ -100,7 +100,7 @@
                     <div>审核文件 | Approval File: <span id="approvalFileNameDisplay">无</span></div>
                     <div>最后更新时间 | Last Update: <span id="lastUpdateTime">-</span></div>
                     <div>协作状态 | Collaboration Status: <span id="collaborationStatus" style="color: #28a745;">🟢 已连接</span></div>
-                    <div>同步状态 | Sync Status: <span id="syncStatus" style="color: #28a745;">🔄 实时同步中</span></div>
+                    <div>同步状态 | Sync Status: <span id="syncStatus" style="color: #28a745;">🟢 已连接</span></div>
                 </div>
                 
                 <!-- 采购周期管理 -->
@@ -129,10 +129,14 @@
             <input type="text" id="itemName" required>
 
             <label for="itemQuantity">数量 | Quantity:</label>
-            <input type="number" id="itemQuantity" min="1" required>
+            <input type="number" id="itemQuantity" min="1" required onchange="calculateTotal()">
 
             <label for="itemPrice">单价 (元) | Unit Price (CNY):</label>
-            <input type="number" id="itemPrice" step="0.01" min="0" required>
+            <input type="number" id="itemPrice" step="0.01" min="0" required onchange="calculateTotal()">
+
+            <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; margin: 10px 0;">
+                <strong>总价 | Total Price: <span id="totalPriceDisplay">0.00</span> 元</strong>
+            </div>
 
             <label for="itemLink">商品链接 | Product Link:</label>
             <input type="url" id="itemLink" placeholder="请输入商品链接 | Please enter product link">
@@ -159,6 +163,7 @@
                     <th>商品名称 | Product Name</th>
                     <th>数量 | Quantity</th>
                     <th>单价 | Unit Price</th>
+                    <th>总价 | Total Price</th>
                     <th>商品链接 | Product Link</th>
                     <th>优先级 | Priority</th>
                     <th>备注 | Notes</th>
@@ -217,12 +222,12 @@
                         <th>商品名称 | Product Name</th>
                         <th>数量 | Quantity</th>
                         <th>单价 | Unit Price</th>
+                        <th>总价 | Total Price</th>
                         <th>商品链接 | Product Link</th>
                         <th>优先级 | Priority</th>
                         <th>备注 | Notes</th>
                         <th>添加人 | Added By</th>
                         <th>添加时间 | Added At</th>
-                        <th>总价 | Total Price</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -262,7 +267,7 @@
             console.log('协作功能已初始化');
             isCollaborationEnabled = true;
             
-            // 初始化WebSocket连接（模拟）
+            // 初始化WebSocket连接（真实实现）
             initializeWebSocket();
             
             // 从localStorage加载共享数据
@@ -302,17 +307,93 @@
             startRealTimeSync();
         }
 
-        // 初始化WebSocket连接（模拟实现）
+        // 初始化WebSocket连接（真实实现）
         function initializeWebSocket() {
-            // 在实际项目中，这里会连接到真实的WebSocket服务器
-            console.log('WebSocket连接已初始化（模拟模式）');
+            const wsUrl = `ws://${window.location.hostname}:3000`;
+            console.log('正在连接WebSocket服务器 | Connecting to WebSocket server:', wsUrl);
             
-            // 模拟WebSocket事件监听
-            window.addEventListener('storage', function(e) {
-                if (e.key === 'sharedPurchaseData' && e.newValue) {
-                    handleDataUpdate(e.newValue);
-                }
-            });
+            try {
+                socket = new WebSocket(wsUrl);
+                
+                socket.onopen = function() {
+                    console.log('WebSocket连接已建立 | WebSocket connection established');
+                    document.getElementById('syncStatus').innerHTML = '🟢 已连接 | Connected';
+                    document.getElementById('syncStatus').style.color = '#28a745';
+                    
+                    // 发送用户登录信息
+                    if (currentUser) {
+                        socket.send(JSON.stringify({
+                            type: 'user_login',
+                            user: currentUser
+                        }));
+                    }
+                };
+                
+                socket.onmessage = function(event) {
+                    try {
+                        const message = JSON.parse(event.data);
+                        console.log('收到WebSocket消息 | Received WebSocket message:', message.type);
+                        
+                        switch (message.type) {
+                            case 'init':
+                                // 初始化数据
+                                handleDataUpdate(JSON.stringify(message.data));
+                                break;
+                                
+                            case 'data_updated':
+                                // 数据更新
+                                handleDataUpdate(JSON.stringify(message.data));
+                                break;
+                                
+                            case 'user_joined':
+                                // 用户加入
+                                onlineUsers = message.onlineUsers;
+                                updateOnlineUsersDisplay();
+                                addEditHistory('用户加入 | User Joined', `${message.user.name} 加入了协作 | joined collaboration`);
+                                break;
+                                
+                            case 'user_left':
+                                // 用户离开
+                                onlineUsers = message.onlineUsers;
+                                updateOnlineUsersDisplay();
+                                addEditHistory('用户离开 | User Left', `${message.user.name} 离开了协作 | left collaboration`);
+                                break;
+                                
+                            case 'heartbeat_ack':
+                                // 心跳确认
+                                console.log('收到心跳确认 | Received heartbeat acknowledgment');
+                                break;
+                        }
+                    } catch (error) {
+                        console.error('解析WebSocket消息失败 | Failed to parse WebSocket message:', error);
+                    }
+                };
+                
+                socket.onclose = function() {
+                    console.log('WebSocket连接已关闭 | WebSocket connection closed');
+                    document.getElementById('syncStatus').innerHTML = '🔴 连接断开 | Disconnected';
+                    document.getElementById('syncStatus').style.color = '#dc3545';
+                    
+                    // 尝试重新连接
+                    setTimeout(() => {
+                        if (isCollaborationEnabled) {
+                            console.log('尝试重新连接WebSocket | Attempting to reconnect WebSocket');
+                            initializeWebSocket();
+                        }
+                    }, 5000);
+                };
+                
+                socket.onerror = function(error) {
+                    console.error('WebSocket连接错误 | WebSocket connection error:', error);
+                    document.getElementById('syncStatus').innerHTML = '🔴 连接错误 | Connection Error';
+                    document.getElementById('syncStatus').style.color = '#dc3545';
+                };
+                
+            } catch (error) {
+                console.error('创建WebSocket连接失败 | Failed to create WebSocket connection:', error);
+                document.getElementById('syncStatus').innerHTML = '🔴 连接失败 | Connection Failed';
+                document.getElementById('syncStatus').style.color = '#dc3545';
+            }
         }
 
         // 启动实时同步
@@ -388,15 +469,15 @@
 
         // 广播心跳
         function broadcastHeartbeat() {
-            if (currentUser) {
+            if (currentUser && socket && socket.readyState === WebSocket.OPEN) {
                 const heartbeat = {
                     type: 'heartbeat',
                     user: currentUser.name,
                     timestamp: Date.now()
                 };
                 
-                // 在实际项目中，这里会通过WebSocket发送
-                console.log('发送心跳:', heartbeat);
+                socket.send(JSON.stringify(heartbeat));
+                console.log('发送心跳 | Sent heartbeat:', heartbeat);
             }
         }
 
@@ -417,6 +498,14 @@
                 onlineUsers.push(currentUser);
             }
             
+            // 通过WebSocket发送登录信息
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'user_login',
+                    user: currentUser
+                }));
+            }
+            
             // 实时同步用户状态
             if (isCollaborationEnabled) {
                 localStorage.setItem('onlineUsers', JSON.stringify(onlineUsers));
@@ -433,15 +522,25 @@
         // 用户退出
         function logoutUser() {
             if (currentUser) {
+                // 通过WebSocket发送登出信息
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                        type: 'user_logout',
+                        user: currentUser
+                    }));
+                }
+                
                 addEditHistory('用户退出 | User Logout', `${currentUser.name} 退出了协作 | left collaboration`);
                 onlineUsers = onlineUsers.filter(user => user.name !== currentUser.name);
                 currentUser = null;
                 
                 // 更新界面
                 document.getElementById('loginArea').style.display = 'block';
-                document.getElementById('onlineUsersArea').style.display = 'none';
+                document.getElementById('collaborationArea').style.display = 'none';
                 document.getElementById('username').value = '';
                 document.getElementById('email').value = '';
+                
+                updateOnlineUsersDisplay();
             }
         }
 
@@ -552,11 +651,11 @@
             
             if (syncStatus) {
                 if (isCollaborationEnabled && currentUser) {
-                    syncStatus.innerHTML = '🔄 实时同步中';
+                    syncStatus.innerHTML = '🟢 已连接';
                     syncStatus.style.color = '#28a745';
                 } else {
-                    syncStatus.innerHTML = '⏸️ 同步已暂停';
-                    syncStatus.style.color = '#ffc107';
+                    syncStatus.innerHTML = '🔴 连接断开';
+                    syncStatus.style.color = '#dc3545';
                 }
             }
         }
@@ -645,6 +744,14 @@
             }, 100);
         }
 
+        // 计算总价
+        function calculateTotal() {
+            const quantity = parseInt(document.getElementById('itemQuantity').value) || 0;
+            const price = parseFloat(document.getElementById('itemPrice').value) || 0;
+            const total = quantity * price;
+            document.getElementById('totalPriceDisplay').textContent = total.toFixed(2);
+        }
+
         // 添加商品到列表
         function addItem() {
             const name = document.getElementById('itemName').value.trim();
@@ -653,6 +760,7 @@
             const link = document.getElementById('itemLink').value.trim();
             const priority = document.getElementById('itemPriority').value;
             const notes = document.getElementById('itemNotes').value.trim();
+            const total = quantity * price;
 
             if (!name) {
                 alert('请输入商品名称 | Please enter item name');
@@ -679,6 +787,7 @@
                 name: name,
                 quantity: quantity,
                 price: price,
+                total: total,
                 link: link,
                 priority: priority,
                 notes: notes,
@@ -783,17 +892,6 @@
             alert(`Excel文件已生成: ${fileName} | Excel file generated: ${fileName}`);
         }
 
-        // Update total price display
-        document.getElementById('quantity').addEventListener('input', updateTotal);
-        document.getElementById('unitPrice').addEventListener('input', updateTotal);
-
-        function updateTotal() {
-            const quantity = parseFloat(document.getElementById('quantity').value) || 0;
-            const unitPrice = parseFloat(document.getElementById('unitPrice').value) || 0;
-            const totalPrice = (quantity * unitPrice).toFixed(2);
-            document.getElementById('totalPriceDisplay').textContent = totalPrice;
-        }
-
         function renderCurrentItemsTable() {
             const tbody = document.getElementById('currentItemsTable').getElementsByTagName('tbody')[0];
             tbody.innerHTML = ''; // Clear existing rows
@@ -804,6 +902,7 @@
                 row.insertCell().textContent = item.name;
                 row.insertCell().textContent = item.quantity;
                 row.insertCell().textContent = item.price.toFixed(2);
+                row.insertCell().textContent = item.total.toFixed(2);
                 row.insertCell().textContent = item.link;
                 row.insertCell().textContent = item.priority;
                 row.insertCell().textContent = item.notes;
@@ -1071,12 +1170,12 @@
                 row.insertCell().textContent = item.name;
                 row.insertCell().textContent = item.quantity;
                 row.insertCell().textContent = item.price.toFixed(2);
+                row.insertCell().textContent = item.total.toFixed(2);
                 row.insertCell().textContent = item.link;
                 row.insertCell().textContent = item.priority;
                 row.insertCell().textContent = item.notes;
                 row.insertCell().textContent = item.addedBy;
                 row.insertCell().textContent = item.addedAt;
-                row.insertCell().textContent = (item.quantity * item.price).toFixed(2);
             });
             
             // 显示历史区域，隐藏其他区域
@@ -1126,7 +1225,7 @@
             }
         }
 
-        // 保存共享数据到localStorage
+        // 保存共享数据到WebSocket服务器
         function saveSharedData() {
             const sharedData = {
                 purchaseItems: sharedPurchaseItems,
@@ -1137,20 +1236,22 @@
             };
             
             try {
-                localStorage.setItem('sharedPurchaseData', JSON.stringify(sharedData));
-                localStorage.setItem('lastDataUpdate', sharedData.lastUpdate.toString());
-                
-                // 触发storage事件以通知其他标签页
-                window.dispatchEvent(new StorageEvent('storage', {
-                    key: 'sharedPurchaseData',
-                    newValue: JSON.stringify(sharedData),
-                    oldValue: localStorage.getItem('sharedPurchaseData'),
-                    storageArea: localStorage
-                }));
-                
-                console.log('共享数据已保存并广播:', sharedData);
+                // 通过WebSocket发送数据
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                        type: 'update_data',
+                        data: sharedData,
+                        user: currentUser?.name || 'Unknown'
+                    }));
+                    console.log('数据已通过WebSocket发送 | Data sent via WebSocket:', sharedData);
+                } else {
+                    console.warn('WebSocket未连接，使用localStorage作为备用 | WebSocket not connected, using localStorage as fallback');
+                    // 备用方案：使用localStorage
+                    localStorage.setItem('sharedPurchaseData', JSON.stringify(sharedData));
+                    localStorage.setItem('lastDataUpdate', sharedData.lastUpdate.toString());
+                }
             } catch (error) {
-                console.error('保存共享数据失败:', error);
+                console.error('保存共享数据失败 | Failed to save shared data:', error);
             }
         }
 
@@ -1278,6 +1379,7 @@
             document.getElementById('itemLink').value = '';
             document.getElementById('itemPriority').value = 'medium';
             document.getElementById('itemNotes').value = '';
+            document.getElementById('totalPriceDisplay').textContent = '0.00';
         }
 
         // 页面加载完成后的初始化
