@@ -89,6 +89,14 @@
                     <!-- 在线用户将在这里显示 -->
                 </div>
                 
+                <!-- 共享商品列表状态 -->
+                <h4>📦 共享商品列表状态</h4>
+                <div id="sharedItemsStatus" style="background: white; border: 1px solid #ddd; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+                    <div>当前共享商品数量: <strong id="sharedItemCount">0</strong> 个</div>
+                    <div>最后更新时间: <span id="lastUpdateTime">-</span></div>
+                    <div>协作状态: <span id="collaborationStatus" style="color: #28a745;">🟢 已连接</span></div>
+                </div>
+                
                 <!-- 编辑历史 -->
                 <h4>📝 编辑历史</h4>
                 <div id="editHistory" class="edit-history">
@@ -196,12 +204,25 @@
         let editHistory = [];
         let socket = null;
         let isCollaborationEnabled = false;
+        let sharedPurchaseItems = []; // 共享的商品列表
 
         // 初始化协作功能
         function initializeCollaboration() {
             // 模拟WebSocket连接（实际项目中需要真实的后端服务）
             console.log('协作功能已初始化');
             isCollaborationEnabled = true;
+            
+            // 初始化共享数据
+            if (sharedPurchaseItems.length === 0) {
+                sharedPurchaseItems = [...purchaseItems];
+            } else {
+                // 同步其他用户的数据
+                purchaseItems = [...sharedPurchaseItems];
+                renderCurrentItemsTable();
+            }
+            
+            // 更新状态显示
+            updateSharedItemsStatus();
         }
 
         // 用户登录
@@ -313,6 +334,60 @@
             });
         }
 
+        // 更新共享商品列表状态显示
+        function updateSharedItemsStatus() {
+            const sharedItemCount = document.getElementById('sharedItemCount');
+            const lastUpdateTime = document.getElementById('lastUpdateTime');
+            const collaborationStatus = document.getElementById('collaborationStatus');
+            
+            if (sharedItemCount) {
+                sharedItemCount.textContent = sharedPurchaseItems.length;
+            }
+            
+            if (lastUpdateTime) {
+                lastUpdateTime.textContent = new Date().toLocaleTimeString();
+            }
+            
+            if (collaborationStatus) {
+                if (isCollaborationEnabled && currentUser) {
+                    collaborationStatus.innerHTML = '🟢 已连接';
+                    collaborationStatus.style.color = '#28a745';
+                } else {
+                    collaborationStatus.innerHTML = '🔴 未连接';
+                    collaborationStatus.style.color = '#dc3545';
+                }
+            }
+        }
+
+        // 同步商品列表到所有用户
+        function syncPurchaseItems() {
+            if (isCollaborationEnabled) {
+                sharedPurchaseItems = [...purchaseItems];
+                // 更新状态显示
+                updateSharedItemsStatus();
+                // 模拟广播给其他用户
+                broadcastPurchaseItemsUpdate();
+            }
+        }
+
+        // 模拟广播商品列表更新
+        function broadcastPurchaseItemsUpdate() {
+            console.log('广播商品列表更新:', sharedPurchaseItems);
+            
+            // 模拟其他用户接收更新
+            setTimeout(() => {
+                if (onlineUsers.length > 1) {
+                    const otherUsers = onlineUsers.filter(user => user.id !== currentUser.id);
+                    if (otherUsers.length > 0) {
+                        otherUsers.forEach(user => {
+                            console.log(`${user.name} 收到了商品列表更新`);
+                            // 在实际项目中，这里会通过WebSocket发送数据
+                        });
+                    }
+                }
+            }, 100);
+        }
+
         // 模拟广播编辑操作
         function broadcastEdit(editEntry) {
             // 在实际项目中，这里会通过WebSocket发送给服务器
@@ -366,6 +441,9 @@
             document.getElementById('purchaseForm').reset(); // Reset form fields
             document.getElementById('totalPriceDisplay').textContent = '0.00'; // Reset total price display
             
+            // 同步到所有用户
+            syncPurchaseItems();
+            
             // 添加编辑记录
             if (currentUser) {
                 addEditHistory('添加商品', `${productName} (数量: ${quantity}, 单价: ${unitPrice}元)`);
@@ -378,6 +456,9 @@
                 const removedItem = purchaseItems[index];
                 purchaseItems.splice(index, 1);
                 renderCurrentItemsTable();
+                
+                // 同步到所有用户
+                syncPurchaseItems();
                 
                 // 添加编辑记录
                 if (currentUser) {
@@ -392,6 +473,9 @@
                 const itemCount = purchaseItems.length;
                 purchaseItems = [];
                 renderCurrentItemsTable();
+                
+                // 同步到所有用户
+                syncPurchaseItems();
                 
                 // 添加编辑记录
                 if (currentUser) {
@@ -580,6 +664,7 @@
         // 页面加载完成后的初始化
         document.addEventListener('DOMContentLoaded', function() {
             updateTotal(); // Calculate initial total price (0.00)
+            updateSharedItemsStatus(); // 初始化共享状态显示
             console.log('采购单管理系统 - 多人在线协作版已加载');
         });
     </script>
