@@ -93,6 +93,9 @@
                 <h4>📦 共享商品列表状态</h4>
                 <div id="sharedItemsStatus" style="background: white; border: 1px solid #ddd; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
                     <div>当前共享商品数量: <strong id="sharedItemCount">0</strong> 个</div>
+                    <div>采购商品: <span id="purchaseItemCount">0</span> 个</div>
+                    <div>审核商品: <span id="approvalItemCount">0</span> 个</div>
+                    <div>审核文件: <span id="approvalFileNameDisplay">无</span></div>
                     <div>最后更新时间: <span id="lastUpdateTime">-</span></div>
                     <div>协作状态: <span id="collaborationStatus" style="color: #28a745;">🟢 已连接</span></div>
                 </div>
@@ -205,6 +208,8 @@
         let socket = null;
         let isCollaborationEnabled = false;
         let sharedPurchaseItems = []; // 共享的商品列表
+        let sharedApprovalItems = []; // 共享的审核商品列表
+        let sharedApprovalFileName = ''; // 共享的审核文件名
 
         // 初始化协作功能
         function initializeCollaboration() {
@@ -219,6 +224,19 @@
                 // 同步其他用户的数据
                 purchaseItems = [...sharedPurchaseItems];
                 renderCurrentItemsTable();
+            }
+            
+            // 初始化共享审核数据
+            if (sharedApprovalItems.length === 0) {
+                sharedApprovalItems = [...itemsForApproval];
+            } else {
+                // 同步其他用户的审核数据
+                itemsForApproval = [...sharedApprovalItems];
+                if (itemsForApproval.length > 0) {
+                    document.getElementById('approvalFileName').textContent = `(文件: ${sharedApprovalFileName})`;
+                    document.getElementById('approvalArea').style.display = 'block';
+                    renderApprovalTable();
+                }
             }
             
             // 更新状态显示
@@ -337,11 +355,27 @@
         // 更新共享商品列表状态显示
         function updateSharedItemsStatus() {
             const sharedItemCount = document.getElementById('sharedItemCount');
+            const purchaseItemCount = document.getElementById('purchaseItemCount');
+            const approvalItemCount = document.getElementById('approvalItemCount');
+            const approvalFileNameDisplay = document.getElementById('approvalFileNameDisplay');
             const lastUpdateTime = document.getElementById('lastUpdateTime');
             const collaborationStatus = document.getElementById('collaborationStatus');
             
             if (sharedItemCount) {
-                sharedItemCount.textContent = sharedPurchaseItems.length;
+                const totalItems = sharedPurchaseItems.length + sharedApprovalItems.length;
+                sharedItemCount.textContent = totalItems;
+            }
+            
+            if (purchaseItemCount) {
+                purchaseItemCount.textContent = sharedPurchaseItems.length;
+            }
+            
+            if (approvalItemCount) {
+                approvalItemCount.textContent = sharedApprovalItems.length;
+            }
+            
+            if (approvalFileNameDisplay) {
+                approvalFileNameDisplay.textContent = sharedApprovalFileName || '无';
             }
             
             if (lastUpdateTime) {
@@ -357,6 +391,35 @@
                     collaborationStatus.style.color = '#dc3545';
                 }
             }
+        }
+
+        // 同步审核商品列表到所有用户
+        function syncApprovalItems() {
+            if (isCollaborationEnabled) {
+                sharedApprovalItems = [...itemsForApproval];
+                // 更新状态显示
+                updateSharedItemsStatus();
+                // 模拟广播给其他用户
+                broadcastApprovalItemsUpdate();
+            }
+        }
+
+        // 模拟广播审核商品列表更新
+        function broadcastApprovalItemsUpdate() {
+            console.log('广播审核商品列表更新:', sharedApprovalItems);
+            
+            // 模拟其他用户接收更新
+            setTimeout(() => {
+                if (onlineUsers.length > 1) {
+                    const otherUsers = onlineUsers.filter(user => user.id !== currentUser.id);
+                    if (otherUsers.length > 0) {
+                        otherUsers.forEach(user => {
+                            console.log(`${user.name} 收到了审核商品列表更新`);
+                            // 在实际项目中，这里会通过WebSocket发送数据
+                        });
+                    }
+                }
+            }, 100);
         }
 
         // 同步商品列表到所有用户
@@ -568,9 +631,13 @@
                     renderApprovalTable();
                     document.getElementById('approvalArea').style.display = 'block';
                     
+                    // 同步审核商品到所有用户
+                    sharedApprovalFileName = file.name;
+                    syncApprovalItems();
+                    
                     // 添加编辑记录
                     if (currentUser) {
-                        addEditHistory('上传审核文件', `上传了 ${file.name} 进行审核`);
+                        addEditHistory('上传审核文件', `上传了 ${file.name} 进行审核 (${itemsForApproval.length} 个商品)`);
                     }
                 } catch (error) {
                     console.error("Error reading Excel file:", error);
@@ -657,7 +724,7 @@
             
             // 添加编辑记录
             if (currentUser) {
-                addEditHistory('生成审核Excel', `生成了审核通过的Excel文件: ${fileName}`);
+                addEditHistory('生成审核Excel', `生成了审核通过的Excel文件: ${fileName} (${approvedItems.length} 个商品)`);
             }
         }
 
