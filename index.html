@@ -100,6 +100,17 @@
                     <div>协作状态: <span id="collaborationStatus" style="color: #28a745;">🟢 已连接</span></div>
                 </div>
                 
+                <!-- 采购周期管理 -->
+                <h4>📅 采购周期管理</h4>
+                <div id="periodStatus" style="background: white; border: 1px solid #ddd; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+                    <div>当前周期开始: <span id="currentPeriodStart">-</span></div>
+                    <div>下次更新时间: <span id="nextUpdateDate">-</span></div>
+                    <div>编辑状态: <span id="editingStatus" style="color: #28a745;">🟢 允许编辑</span></div>
+                    <div>历史记录数量: <span id="historyCount">0</span> 个周期</div>
+                    <button type="button" onclick="viewPurchaseHistory()" style="background-color: #17a2b8; margin-top: 10px;">📋 查看历史采购列表</button>
+                    <button type="button" onclick="forceUpdatePeriod()" style="background-color: #ffc107; color: black; margin-top: 10px; margin-left: 10px;">🔄 强制更新周期</button>
+                </div>
+                
                 <!-- 编辑历史 -->
                 <h4>📝 编辑历史</h4>
                 <div id="editHistory" class="edit-history">
@@ -195,6 +206,33 @@
                 <button type="button" onclick="generateApprovedExcel()">生成审核通过的采购单</button>
             </div>
         </div>
+
+        <!-- 历史采购列表显示区域 -->
+        <div id="historyArea" style="display: none;" class="section">
+            <h2>📋 历史采购列表</h2>
+            <div id="historyNavigation" style="margin-bottom: 20px;">
+                <button type="button" onclick="closeHistoryView()" style="background-color: #6c757d;">返回当前列表</button>
+                <span id="historyPeriodInfo" style="margin-left: 20px; font-weight: bold;"></span>
+            </div>
+            <table id="historyTable">
+                <thead>
+                    <tr>
+                        <th>填写人</th>
+                        <th>邮箱</th>
+                        <th>名称</th>
+                        <th>型号</th>
+                        <th>数量</th>
+                        <th>单价</th>
+                        <th>链接</th>
+                        <th>总价</th>
+                        <th>备注</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- 历史商品将在这里显示 -->
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <script>
@@ -210,6 +248,12 @@
         let sharedPurchaseItems = []; // 共享的商品列表
         let sharedApprovalItems = []; // 共享的审核商品列表
         let sharedApprovalFileName = ''; // 共享的审核文件名
+        
+        // 历史采购列表管理
+        let purchaseHistory = []; // 历史采购列表
+        let currentPeriodStart = null; // 当前周期开始时间
+        let nextUpdateDate = null; // 下次更新时间
+        let isEditingEnabled = true; // 是否允许编辑
 
         // 初始化协作功能
         function initializeCollaboration() {
@@ -238,6 +282,9 @@
                     renderApprovalTable();
                 }
             }
+            
+            // 初始化采购周期
+            initializePurchasePeriod();
             
             // 更新状态显示
             updateSharedItemsStatus();
@@ -471,6 +518,12 @@
 
         // 增强的添加商品功能
         function addItem() {
+            // 检查编辑权限
+            if (!isEditingEnabled) {
+                alert('当前采购周期已结束，不允许添加新商品。请等待下一个周期或联系管理员。');
+                return;
+            }
+            
             const fillerName = document.getElementById('fillerName').value.trim();
             const fillerEmail = document.getElementById('fillerEmail').value.trim();
             const productName = document.getElementById('productName').value.trim();
@@ -515,6 +568,12 @@
 
         // 增强的移除商品功能
         function removeItem(index) {
+            // 检查编辑权限
+            if (!isEditingEnabled) {
+                alert('当前采购周期已结束，不允许修改商品。请等待下一个周期或联系管理员。');
+                return;
+            }
+            
             if (confirm('确定要移除此商品吗?')) {
                 const removedItem = purchaseItems[index];
                 purchaseItems.splice(index, 1);
@@ -532,6 +591,12 @@
 
         // 增强的清空列表功能
         function clearCurrentItems() {
+            // 检查编辑权限
+            if (!isEditingEnabled) {
+                alert('当前采购周期已结束，不允许清空列表。请等待下一个周期或联系管理员。');
+                return;
+            }
+            
             if (confirm('确定要清空当前所有待采购商品吗? 这将清除列表但不会影响已生成的Excel文件。')) {
                 const itemCount = purchaseItems.length;
                 purchaseItems = [];
@@ -728,10 +793,215 @@
             }
         }
 
+        // 初始化采购周期
+        function initializePurchasePeriod() {
+            const now = new Date();
+            
+            // 如果没有设置周期开始时间，设置为当前时间
+            if (!currentPeriodStart) {
+                currentPeriodStart = new Date(now);
+                localStorage.setItem('currentPeriodStart', currentPeriodStart.toISOString());
+            } else {
+                currentPeriodStart = new Date(currentPeriodStart);
+            }
+            
+            // 计算下次更新时间（两周后）
+            nextUpdateDate = new Date(currentPeriodStart);
+            nextUpdateDate.setDate(nextUpdateDate.getDate() + 14);
+            
+            // 检查是否需要更新周期
+            if (now >= nextUpdateDate) {
+                updatePurchasePeriod();
+            }
+            
+            // 加载历史记录
+            loadPurchaseHistory();
+            
+            // 更新周期状态显示
+            updatePeriodStatus();
+        }
+
+        // 更新采购周期
+        function updatePurchasePeriod() {
+            if (purchaseItems.length > 0) {
+                // 保存当前周期到历史记录
+                const periodRecord = {
+                    id: Date.now(),
+                    periodStart: currentPeriodStart,
+                    periodEnd: new Date(),
+                    items: [...purchaseItems],
+                    totalItems: purchaseItems.length,
+                    totalValue: purchaseItems.reduce((sum, item) => sum + item["总价"], 0)
+                };
+                
+                purchaseHistory.unshift(periodRecord);
+                localStorage.setItem('purchaseHistory', JSON.stringify(purchaseHistory));
+                
+                // 添加编辑记录
+                if (currentUser) {
+                    addEditHistory('周期更新', `保存了 ${purchaseItems.length} 个商品到历史记录`);
+                }
+            }
+            
+            // 清空当前列表
+            purchaseItems = [];
+            sharedPurchaseItems = [];
+            
+            // 设置新的周期开始时间
+            currentPeriodStart = new Date();
+            nextUpdateDate = new Date(currentPeriodStart);
+            nextUpdateDate.setDate(nextUpdateDate.getDate() + 14);
+            
+            // 保存到本地存储
+            localStorage.setItem('currentPeriodStart', currentPeriodStart.toISOString());
+            localStorage.setItem('nextUpdateDate', nextUpdateDate.toISOString());
+            
+            // 更新显示
+            renderCurrentItemsTable();
+            updatePeriodStatus();
+            updateSharedItemsStatus();
+        }
+
+        // 强制更新周期
+        function forceUpdatePeriod() {
+            if (confirm('确定要强制更新采购周期吗？当前的商品列表将被保存到历史记录中。')) {
+                updatePurchasePeriod();
+                if (currentUser) {
+                    addEditHistory('强制更新周期', '管理员强制更新了采购周期');
+                }
+            }
+        }
+
+        // 加载历史记录
+        function loadPurchaseHistory() {
+            const savedHistory = localStorage.getItem('purchaseHistory');
+            if (savedHistory) {
+                purchaseHistory = JSON.parse(savedHistory);
+                // 转换日期字符串为Date对象
+                purchaseHistory.forEach(record => {
+                    record.periodStart = new Date(record.periodStart);
+                    record.periodEnd = new Date(record.periodEnd);
+                });
+            }
+        }
+
+        // 查看历史采购列表
+        function viewPurchaseHistory() {
+            if (purchaseHistory.length === 0) {
+                alert('暂无历史采购记录');
+                return;
+            }
+            
+            // 显示历史记录选择界面
+            let historyOptions = '请选择要查看的历史周期：\n\n';
+            purchaseHistory.forEach((record, index) => {
+                const startDate = record.periodStart.toLocaleDateString();
+                const endDate = record.periodEnd.toLocaleDateString();
+                const totalValue = record.totalValue.toFixed(2);
+                historyOptions += `${index + 1}. ${startDate} - ${endDate} (${record.totalItems}个商品, 总价值: ${totalValue}元)\n`;
+            });
+            
+            const choice = prompt(historyOptions + '\n请输入序号 (1-' + purchaseHistory.length + '):');
+            const selectedIndex = parseInt(choice) - 1;
+            
+            if (selectedIndex >= 0 && selectedIndex < purchaseHistory.length) {
+                displayHistoryPeriod(selectedIndex);
+            }
+        }
+
+        // 显示指定历史周期
+        function displayHistoryPeriod(index) {
+            const record = purchaseHistory[index];
+            const startDate = record.periodStart.toLocaleDateString();
+            const endDate = record.periodEnd.toLocaleDateString();
+            
+            // 更新历史信息显示
+            document.getElementById('historyPeriodInfo').textContent = 
+                `周期: ${startDate} - ${endDate} | 商品数量: ${record.totalItems} | 总价值: ${record.totalValue.toFixed(2)}元`;
+            
+            // 渲染历史表格
+            const tbody = document.getElementById('historyTable').getElementsByTagName('tbody')[0];
+            tbody.innerHTML = '';
+            
+            record.items.forEach(item => {
+                const row = tbody.insertRow();
+                row.insertCell().textContent = item["填写人"];
+                row.insertCell().textContent = item["填写人邮箱"];
+                row.insertCell().textContent = item["名称"];
+                row.insertCell().textContent = item["型号"];
+                row.insertCell().textContent = item["数量"];
+                row.insertCell().textContent = item["单价"].toFixed(2);
+                row.insertCell().textContent = item["链接"];
+                row.insertCell().textContent = item["总价"].toFixed(2);
+                row.insertCell().textContent = item["商品备注"];
+            });
+            
+            // 显示历史区域，隐藏其他区域
+            document.getElementById('historyArea').style.display = 'block';
+            document.getElementById('purchaseForm').parentElement.style.display = 'none';
+            document.getElementById('currentItemsTable').parentElement.style.display = 'none';
+            document.getElementById('approvalArea').parentElement.style.display = 'none';
+        }
+
+        // 关闭历史视图
+        function closeHistoryView() {
+            document.getElementById('historyArea').style.display = 'none';
+            document.getElementById('purchaseForm').parentElement.style.display = 'block';
+            document.getElementById('currentItemsTable').parentElement.style.display = 'block';
+            if (document.getElementById('approvalArea').style.display !== 'none') {
+                document.getElementById('approvalArea').parentElement.style.display = 'block';
+            }
+        }
+
+        // 更新周期状态显示
+        function updatePeriodStatus() {
+            const currentPeriodStartElement = document.getElementById('currentPeriodStart');
+            const nextUpdateDateElement = document.getElementById('nextUpdateDate');
+            const editingStatusElement = document.getElementById('editingStatus');
+            const historyCountElement = document.getElementById('historyCount');
+            
+            if (currentPeriodStartElement && currentPeriodStart) {
+                currentPeriodStartElement.textContent = currentPeriodStart.toLocaleDateString();
+            }
+            
+            if (nextUpdateDateElement && nextUpdateDate) {
+                nextUpdateDateElement.textContent = nextUpdateDate.toLocaleDateString();
+            }
+            
+            if (editingStatusElement) {
+                if (isEditingEnabled) {
+                    editingStatusElement.innerHTML = '🟢 允许编辑';
+                    editingStatusElement.style.color = '#28a745';
+                } else {
+                    editingStatusElement.innerHTML = '🔴 禁止编辑';
+                    editingStatusElement.style.color = '#dc3545';
+                }
+            }
+            
+            if (historyCountElement) {
+                historyCountElement.textContent = purchaseHistory.length;
+            }
+        }
+
         // 页面加载完成后的初始化
         document.addEventListener('DOMContentLoaded', function() {
             updateTotal(); // Calculate initial total price (0.00)
             updateSharedItemsStatus(); // 初始化共享状态显示
+            
+            // 加载保存的周期数据
+            const savedPeriodStart = localStorage.getItem('currentPeriodStart');
+            const savedNextUpdate = localStorage.getItem('nextUpdateDate');
+            
+            if (savedPeriodStart) {
+                currentPeriodStart = new Date(savedPeriodStart);
+            }
+            if (savedNextUpdate) {
+                nextUpdateDate = new Date(savedNextUpdate);
+            }
+            
+            // 初始化采购周期
+            initializePurchasePeriod();
+            
             console.log('采购单管理系统 - 多人在线协作版已加载');
         });
     </script>
