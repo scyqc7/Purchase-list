@@ -69,7 +69,36 @@
 </head>
 <body>
     <div class="container">
-        <h1>采购单填写</h1>
+        <h1>采购单填写 - 多人在线协作版</h1>
+        
+        <!-- 多人在线协作面板 -->
+        <div class="collaboration-panel">
+            <h3>🔄 多人在线协作</h3>
+            
+            <!-- 用户登录区域 -->
+            <div id="loginArea">
+                <label for="userName">您的姓名:</label>
+                <input type="text" id="userName" placeholder="请输入您的姓名" style="width: 200px; margin-right: 10px;">
+                <button type="button" onclick="loginUser()">加入协作</button>
+            </div>
+            
+            <!-- 在线用户显示 -->
+            <div id="onlineUsersArea" style="display: none;">
+                <h4>👥 在线用户 (<span id="userCount">0</span>)</h4>
+                <div id="onlineUsers" class="online-users">
+                    <!-- 在线用户将在这里显示 -->
+                </div>
+                
+                <!-- 编辑历史 -->
+                <h4>📝 编辑历史</h4>
+                <div id="editHistory" class="edit-history">
+                    <!-- 编辑记录将在这里显示 -->
+                </div>
+                
+                <button type="button" onclick="logoutUser()" style="background-color: #dc3545;">退出协作</button>
+            </div>
+        </div>
+        
         <form id="purchaseForm">
             <label for="fillerName">填写人:</label>
             <input type="text" id="fillerName" required>
@@ -160,18 +189,149 @@
     <script>
         let purchaseItems = []; // Array to store current purchase items
         let itemsForApproval = []; // Array to store items loaded from Excel for approval
+        
+        // 多人在线协作变量
+        let currentUser = null;
+        let onlineUsers = [];
+        let editHistory = [];
+        let socket = null;
+        let isCollaborationEnabled = false;
 
-        // Update total price display
-        document.getElementById('quantity').addEventListener('input', updateTotal);
-        document.getElementById('unitPrice').addEventListener('input', updateTotal);
-
-        function updateTotal() {
-            const quantity = parseFloat(document.getElementById('quantity').value) || 0;
-            const unitPrice = parseFloat(document.getElementById('unitPrice').value) || 0;
-            const totalPrice = (quantity * unitPrice).toFixed(2);
-            document.getElementById('totalPriceDisplay').textContent = totalPrice;
+        // 初始化协作功能
+        function initializeCollaboration() {
+            // 模拟WebSocket连接（实际项目中需要真实的后端服务）
+            console.log('协作功能已初始化');
+            isCollaborationEnabled = true;
         }
 
+        // 用户登录
+        function loginUser() {
+            const userName = document.getElementById('userName').value.trim();
+            if (!userName) {
+                alert('请输入您的姓名');
+                return;
+            }
+            
+            currentUser = {
+                id: Date.now() + Math.random(),
+                name: userName,
+                joinTime: new Date()
+            };
+            
+            // 添加到在线用户列表
+            if (!onlineUsers.find(user => user.id === currentUser.id)) {
+                onlineUsers.push(currentUser);
+            }
+            
+            // 更新界面
+            document.getElementById('loginArea').style.display = 'none';
+            document.getElementById('onlineUsersArea').style.display = 'block';
+            updateOnlineUsersDisplay();
+            
+            // 添加登录记录
+            addEditHistory('用户登录', `${userName} 加入了协作`);
+            
+            // 初始化协作
+            initializeCollaboration();
+        }
+
+        // 用户退出
+        function logoutUser() {
+            if (currentUser) {
+                addEditHistory('用户退出', `${currentUser.name} 退出了协作`);
+                onlineUsers = onlineUsers.filter(user => user.id !== currentUser.id);
+                currentUser = null;
+                
+                // 更新界面
+                document.getElementById('loginArea').style.display = 'block';
+                document.getElementById('onlineUsersArea').style.display = 'none';
+                document.getElementById('userName').value = '';
+            }
+        }
+
+        // 更新在线用户显示
+        function updateOnlineUsersDisplay() {
+            const usersContainer = document.getElementById('onlineUsers');
+            const userCount = document.getElementById('userCount');
+            
+            usersContainer.innerHTML = '';
+            userCount.textContent = onlineUsers.length;
+            
+            onlineUsers.forEach(user => {
+                const userBadge = document.createElement('div');
+                userBadge.className = `user-badge ${user.id === currentUser?.id ? 'self' : ''}`;
+                userBadge.textContent = user.name;
+                usersContainer.appendChild(userBadge);
+            });
+        }
+
+        // 添加编辑历史记录
+        function addEditHistory(action, description) {
+            if (!currentUser) return;
+            
+            const editEntry = {
+                id: Date.now(),
+                user: currentUser.name,
+                action: action,
+                description: description,
+                timestamp: new Date()
+            };
+            
+            editHistory.unshift(editEntry);
+            
+            // 限制历史记录数量
+            if (editHistory.length > 50) {
+                editHistory = editHistory.slice(0, 50);
+            }
+            
+            updateEditHistoryDisplay();
+            
+            // 模拟广播给其他用户
+            if (isCollaborationEnabled) {
+                broadcastEdit(editEntry);
+            }
+        }
+
+        // 更新编辑历史显示
+        function updateEditHistoryDisplay() {
+            const historyContainer = document.getElementById('editHistory');
+            historyContainer.innerHTML = '';
+            
+            editHistory.forEach(entry => {
+                const entryDiv = document.createElement('div');
+                entryDiv.className = 'edit-entry';
+                
+                const timeStr = entry.timestamp.toLocaleTimeString();
+                entryDiv.innerHTML = `
+                    <span class="edit-time">${timeStr}</span> - 
+                    <span class="edit-user">${entry.user}</span> 
+                    <span class="edit-action">${entry.action}</span>: 
+                    <span class="edit-item">${entry.description}</span>
+                `;
+                
+                historyContainer.appendChild(entryDiv);
+            });
+        }
+
+        // 模拟广播编辑操作
+        function broadcastEdit(editEntry) {
+            // 在实际项目中，这里会通过WebSocket发送给服务器
+            console.log('广播编辑操作:', editEntry);
+            
+            // 模拟其他用户接收
+            setTimeout(() => {
+                if (onlineUsers.length > 1) {
+                    // 模拟其他用户的操作
+                    const otherUsers = onlineUsers.filter(user => user.id !== currentUser.id);
+                    if (otherUsers.length > 0) {
+                        const randomUser = otherUsers[Math.floor(Math.random() * otherUsers.length)];
+                        console.log(`${randomUser.name} 收到了编辑通知`);
+                    }
+                }
+            }, 100);
+        }
+
+        // 增强的添加商品功能
         function addItem() {
             const fillerName = document.getElementById('fillerName').value.trim();
             const fillerEmail = document.getElementById('fillerEmail').value.trim();
@@ -205,6 +365,77 @@
             renderCurrentItemsTable();
             document.getElementById('purchaseForm').reset(); // Reset form fields
             document.getElementById('totalPriceDisplay').textContent = '0.00'; // Reset total price display
+            
+            // 添加编辑记录
+            if (currentUser) {
+                addEditHistory('添加商品', `${productName} (数量: ${quantity}, 单价: ${unitPrice}元)`);
+            }
+        }
+
+        // 增强的移除商品功能
+        function removeItem(index) {
+            if (confirm('确定要移除此商品吗?')) {
+                const removedItem = purchaseItems[index];
+                purchaseItems.splice(index, 1);
+                renderCurrentItemsTable();
+                
+                // 添加编辑记录
+                if (currentUser) {
+                    addEditHistory('移除商品', `${removedItem["名称"]} (原填写人: ${removedItem["填写人"]})`);
+                }
+            }
+        }
+
+        // 增强的清空列表功能
+        function clearCurrentItems() {
+            if (confirm('确定要清空当前所有待采购商品吗? 这将清除列表但不会影响已生成的Excel文件。')) {
+                const itemCount = purchaseItems.length;
+                purchaseItems = [];
+                renderCurrentItemsTable();
+                
+                // 添加编辑记录
+                if (currentUser) {
+                    addEditHistory('清空列表', `清空了 ${itemCount} 个商品`);
+                }
+            }
+        }
+
+        // 增强的生成Excel功能
+        function generateExcel() {
+            if (purchaseItems.length === 0) {
+                alert('没有可导出的商品。请先添加商品。');
+                return;
+            }
+
+            const worksheet = XLSX.utils.json_to_sheet(purchaseItems, {
+                header: ["填写人", "填写人邮箱", "名称", "型号", "数量", "单价", "链接", "总价", "商品备注"]
+            });
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "采购单");
+
+            // Generate filename with current date
+            const today = new Date();
+            const dateString = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+            const fileName = `采购单_${dateString}.xlsx`;
+
+            XLSX.writeFile(workbook, fileName);
+            alert(`采购单 "${fileName}" 已生成并开始下载。\n请注意：当前列表中的商品已导出。如需开始新的采购周期，建议先"清空当前列表"。`);
+            
+            // 添加编辑记录
+            if (currentUser) {
+                addEditHistory('导出Excel', `导出了 ${purchaseItems.length} 个商品到 ${fileName}`);
+            }
+        }
+
+        // Update total price display
+        document.getElementById('quantity').addEventListener('input', updateTotal);
+        document.getElementById('unitPrice').addEventListener('input', updateTotal);
+
+        function updateTotal() {
+            const quantity = parseFloat(document.getElementById('quantity').value) || 0;
+            const unitPrice = parseFloat(document.getElementById('unitPrice').value) || 0;
+            const totalPrice = (quantity * unitPrice).toFixed(2);
+            document.getElementById('totalPriceDisplay').textContent = totalPrice;
         }
 
         function renderCurrentItemsTable() {
@@ -231,41 +462,6 @@
                 actionCell.appendChild(removeButton);
             });
         }
-        
-        function removeItem(index) {
-            if (confirm('确定要移除此商品吗?')) {
-                purchaseItems.splice(index, 1);
-                renderCurrentItemsTable();
-            }
-        }
-
-        function clearCurrentItems() {
-            if (confirm('确定要清空当前所有待采购商品吗? 这将清除列表但不会影响已生成的Excel文件。')) {
-                purchaseItems = [];
-                renderCurrentItemsTable();
-            }
-        }
-
-        function generateExcel() {
-            if (purchaseItems.length === 0) {
-                alert('没有可导出的商品。请先添加商品。');
-                return;
-            }
-
-            const worksheet = XLSX.utils.json_to_sheet(purchaseItems, {
-                header: ["填写人", "填写人邮箱", "名称", "型号", "数量", "单价", "链接", "总价", "商品备注"]
-            });
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "采购单");
-
-            // Generate filename with current date
-            const today = new Date();
-            const dateString = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-            const fileName = `采购单_${dateString}.xlsx`;
-
-            XLSX.writeFile(workbook, fileName);
-            alert(`采购单 "${fileName}" 已生成并开始下载。\n请注意：当前列表中的商品已导出。如需开始新的采购周期，建议先"清空当前列表"。`);
-        }
 
         function loadExcelForApproval() {
             const fileInput = document.getElementById('excelFileToApprove');
@@ -287,6 +483,11 @@
 
                     renderApprovalTable();
                     document.getElementById('approvalArea').style.display = 'block';
+                    
+                    // 添加编辑记录
+                    if (currentUser) {
+                        addEditHistory('上传审核文件', `上传了 ${file.name} 进行审核`);
+                    }
                 } catch (error) {
                     console.error("Error reading Excel file:", error);
                     alert("无法读取或解析Excel文件。请确保文件格式正确且未损坏。\n错误: " + error.message);
@@ -369,10 +570,18 @@
 
             XLSX.writeFile(workbook, fileName);
             alert(`审核通过的采购单 "${fileName}" 已生成并开始下载。`);
+            
+            // 添加编辑记录
+            if (currentUser) {
+                addEditHistory('生成审核Excel', `生成了审核通过的Excel文件: ${fileName}`);
+            }
         }
 
-        // Initialize
-        updateTotal(); // Calculate initial total price (0.00)
+        // 页面加载完成后的初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            updateTotal(); // Calculate initial total price (0.00)
+            console.log('采购单管理系统 - 多人在线协作版已加载');
+        });
     </script>
 </body>
 </html>
