@@ -3,12 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>采购单自动填写与审核</title>
+    <title>采购单自动填写与审核 - 多人在线协作版</title>
     <!-- SheetJS library for Excel generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Socket.IO for real-time collaboration -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
-        .container { max-width: 900px; margin: auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        .container { max-width: 1200px; margin: auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
         h1, h2 { text-align: center; color: #333; }
         label { display: block; margin-top: 10px; font-weight: bold; }
         input[type="text"], input[type="email"], input[type="number"], input[type="url"] {
@@ -26,6 +28,43 @@
         .section { margin-top: 30px; padding-top: 20px; border-top: 1px dashed #ccc; }
         #totalPrice { font-weight: bold; color: green; }
         .item-row td:last-child { white-space: pre-wrap; word-break: break-all; } /* For remarks */
+        
+        /* 多人在线协作样式 */
+        .collaboration-panel {
+            background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px; margin-bottom: 20px;
+        }
+        .online-users {
+            display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;
+        }
+        .user-badge {
+            background: #28a745; color: white; padding: 5px 10px; border-radius: 15px; font-size: 0.9em;
+        }
+        .user-badge.self { background: #007bff; }
+        .edit-history {
+            max-height: 200px; overflow-y: auto; background: white; border: 1px solid #ddd; padding: 10px; border-radius: 4px;
+        }
+        .edit-entry {
+            border-bottom: 1px solid #eee; padding: 5px 0; font-size: 0.9em;
+        }
+        .edit-entry:last-child { border-bottom: none; }
+        .edit-time { color: #666; font-size: 0.8em; }
+        .edit-user { font-weight: bold; color: #007bff; }
+        .edit-action { color: #28a745; }
+        .edit-item { color: #dc3545; }
+        
+        /* 实时编辑指示器 */
+        .editing-indicator {
+            position: fixed; top: 10px; right: 10px; background: #28a745; color: white; padding: 10px; border-radius: 5px; z-index: 1000;
+        }
+        .item-being-edited {
+            background-color: #fff3cd; border: 2px solid #ffc107;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .container { max-width: 100%; margin: 10px; }
+            .online-users { flex-direction: column; }
+        }
     </style>
 </head>
 <body>
