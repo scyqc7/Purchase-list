@@ -125,32 +125,27 @@
         </div>
         
         <form id="purchaseForm">
-            <label for="fillerName">填写人 | Filler Name:</label>
-            <input type="text" id="fillerName" required>
+            <label for="itemName">商品名称 | Product Name:</label>
+            <input type="text" id="itemName" required>
 
-            <label for="fillerEmail">填写人邮箱 | Filler Email:</label>
-            <input type="email" id="fillerEmail" required>
+            <label for="itemQuantity">数量 | Quantity:</label>
+            <input type="number" id="itemQuantity" min="1" required>
 
-            <label for="productLink">商品链接 | Product Link (粘贴后请手动填写下方信息 | Paste and manually fill in the information below):</label>
-            <input type="url" id="productLink">
-            <small>注意 | Note: 自动从链接获取信息功能复杂, 此处仅保存链接, 请手动填写商品详情 | Auto-fetching from links is complex, only saves the link here, please manually fill in product details.</small>
+            <label for="itemPrice">单价 (元) | Unit Price (CNY):</label>
+            <input type="number" id="itemPrice" step="0.01" min="0" required>
 
-            <label for="productName">名称 | Product Name:</label>
-            <input type="text" id="productName" required>
+            <label for="itemSupplier">供应商 | Supplier:</label>
+            <input type="text" id="itemSupplier" required>
 
-            <label for="productModel">型号 | Model:</label>
-            <input type="text" id="productModel">
+            <label for="itemPriority">优先级 | Priority:</label>
+            <select id="itemPriority">
+                <option value="low">低 | Low</option>
+                <option value="medium" selected>中 | Medium</option>
+                <option value="high">高 | High</option>
+            </select>
 
-            <label for="quantity">数量 | Quantity:</label>
-            <input type="number" id="quantity" min="1" required>
-
-            <label for="unitPrice">单价 (元) | Unit Price (CNY):</label>
-            <input type="number" id="unitPrice" step="0.01" min="0" required>
-
-            <label for="remarks">商品备注 | Product Remarks:</label>
-            <input type="text" id="remarks">
-
-            <div>总价 | Total Price: <span id="totalPriceDisplay">0.00</span> 元</div>
+            <label for="itemNotes">备注 | Notes:</label>
+            <input type="text" id="itemNotes">
 
             <button type="button" onclick="addItem()">添加商品 | Add Item</button>
             <button type="button" onclick="generateExcel()">生成采购单 (Excel) | Generate Purchase Order (Excel)</button>
@@ -161,15 +156,14 @@
         <table id="currentItemsTable">
             <thead>
                 <tr>
-                    <th>填写人 | Filler Name</th>
-                    <th>邮箱 | Email</th>
-                    <th>名称 | Product Name</th>
-                    <th>型号 | Model</th>
+                    <th>商品名称 | Product Name</th>
                     <th>数量 | Quantity</th>
                     <th>单价 | Unit Price</th>
-                    <th>链接 | Link</th>
-                    <th>总价 | Total Price</th>
-                    <th>备注 | Remarks</th>
+                    <th>供应商 | Supplier</th>
+                    <th>优先级 | Priority</th>
+                    <th>备注 | Notes</th>
+                    <th>添加人 | Added By</th>
+                    <th>添加时间 | Added At</th>
                     <th>操作 | Actions</th>
                 </tr>
             </thead>
@@ -220,15 +214,15 @@
             <table id="historyTable">
                 <thead>
                     <tr>
-                        <th>填写人 | Filler Name</th>
-                        <th>邮箱 | Email</th>
-                        <th>名称 | Product Name</th>
-                        <th>型号 | Model</th>
+                        <th>商品名称 | Product Name</th>
                         <th>数量 | Quantity</th>
                         <th>单价 | Unit Price</th>
-                        <th>链接 | Link</th>
+                        <th>供应商 | Supplier</th>
+                        <th>优先级 | Priority</th>
+                        <th>备注 | Notes</th>
+                        <th>添加人 | Added By</th>
+                        <th>添加时间 | Added At</th>
                         <th>总价 | Total Price</th>
-                        <th>备注 | Remarks</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -807,15 +801,14 @@
             purchaseItems.forEach((item, index) => {
                 const row = tbody.insertRow();
                 row.className = 'item-row';
-                row.insertCell().textContent = item["填写人"];
-                row.insertCell().textContent = item["填写人邮箱"];
-                row.insertCell().textContent = item["名称"];
-                row.insertCell().textContent = item["型号"];
-                row.insertCell().textContent = item["数量"];
-                row.insertCell().textContent = item["单价"].toFixed(2);
-                row.insertCell().textContent = item["链接"];
-                row.insertCell().textContent = item["总价"].toFixed(2);
-                row.insertCell().textContent = item["商品备注"];
+                row.insertCell().textContent = item.name;
+                row.insertCell().textContent = item.quantity;
+                row.insertCell().textContent = item.price.toFixed(2);
+                row.insertCell().textContent = item.supplier;
+                row.insertCell().textContent = item.priority;
+                row.insertCell().textContent = item.notes;
+                row.insertCell().textContent = item.addedBy;
+                row.insertCell().textContent = item.addedAt;
                 
                 const actionCell = row.insertCell();
                 const removeButton = document.createElement('button');
@@ -981,7 +974,7 @@
                     periodEnd: new Date(),
                     items: [...purchaseItems],
                     totalItems: purchaseItems.length,
-                    totalValue: purchaseItems.reduce((sum, item) => sum + item["总价"], 0)
+                    totalValue: purchaseItems.reduce((sum, item) => sum + (item.quantity * item.price), 0)
                 };
                 
                 purchaseHistory.unshift(periodRecord);
@@ -1075,15 +1068,15 @@
             
             record.items.forEach(item => {
                 const row = tbody.insertRow();
-                row.insertCell().textContent = item["填写人"];
-                row.insertCell().textContent = item["填写人邮箱"];
-                row.insertCell().textContent = item["名称"];
-                row.insertCell().textContent = item["型号"];
-                row.insertCell().textContent = item["数量"];
-                row.insertCell().textContent = item["单价"].toFixed(2);
-                row.insertCell().textContent = item["链接"];
-                row.insertCell().textContent = item["总价"].toFixed(2);
-                row.insertCell().textContent = item["商品备注"];
+                row.insertCell().textContent = item.name;
+                row.insertCell().textContent = item.quantity;
+                row.insertCell().textContent = item.price.toFixed(2);
+                row.insertCell().textContent = item.supplier;
+                row.insertCell().textContent = item.priority;
+                row.insertCell().textContent = item.notes;
+                row.insertCell().textContent = item.addedBy;
+                row.insertCell().textContent = item.addedAt;
+                row.insertCell().textContent = (item.quantity * item.price).toFixed(2);
             });
             
             // 显示历史区域，隐藏其他区域
