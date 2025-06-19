@@ -36,10 +36,11 @@
         <div id="mainArea" style="display:none;">
             <h4>当前采购清单 | Current Purchase List</h4>
             <form onsubmit="addItem(event)">
-                <input id="itemName" placeholder="商品名称 | Name" required>
-                <input id="itemQuantity" type="number" min="1" placeholder="数量 | Qty" required style="width:70px;">
-                <input id="itemPrice" type="number" min="0.01" step="0.01" placeholder="单价 | Price" required style="width:90px;">
-                <input id="itemLink" placeholder="商品链接 | Link">
+                <input id="itemFiller" placeholder="填写人 | Filler" required style="width:120px;">
+                <input id="itemName" placeholder="商品名称 | Product Name" required>
+                <input id="itemQuantity" type="number" min="1" placeholder="数量 | Quantity" required style="width:70px;">
+                <input id="itemPrice" type="number" min="0.01" step="0.01" placeholder="单价 | Unit Price" required style="width:90px;">
+                <input id="itemLink" placeholder="商品链接 | Product Link">
                 <input id="itemPriority" placeholder="优先级 | Priority" value="medium" style="width:80px;">
                 <input id="itemNotes" placeholder="备注 | Notes">
                 <button class="btn btn-primary" type="submit">添加 | Add</button>
@@ -48,7 +49,7 @@
             <table id="purchaseTable">
                 <thead>
                     <tr>
-                        <th>商品名称</th><th>数量</th><th>单价</th><th>总价</th><th>商品链接</th><th>优先级</th><th>备注</th><th>添加人邮箱</th><th>操作</th>
+                        <th>填写人 | Filler</th><th>商品名称 | Product Name</th><th>数量 | Quantity</th><th>单价 | Unit Price</th><th>总价 | Total Price</th><th>商品链接 | Product Link</th><th>优先级 | Priority</th><th>备注 | Notes</th><th>添加人邮箱 | Email</th><th>操作 | Action</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -121,15 +122,16 @@
         function addItem(e) {
             e.preventDefault();
             if (!currentUser) return;
+            const filler = document.getElementById('itemFiller').value.trim();
             const name = document.getElementById('itemName').value.trim();
             const quantity = parseInt(document.getElementById('itemQuantity').value);
             const price = parseFloat(document.getElementById('itemPrice').value);
             const link = document.getElementById('itemLink').value.trim();
             const priority = document.getElementById('itemPriority').value.trim();
             const notes = document.getElementById('itemNotes').value.trim();
-            if (!name || !quantity || !price) { alert('请填写完整信息'); return; }
+            if (!filler || !name || !quantity || !price) { alert('请填写完整信息 | Please fill all fields'); return; }
             const item = {
-                name, quantity, price, total: +(quantity * price).toFixed(2), link, priority, notes,
+                filler, name, quantity, price, total: +(quantity * price).toFixed(2), link, priority, notes,
                 addedBy: currentUser, addedAt: dayjs().format('YYYY-MM-DD HH:mm:ss')
             };
             purchaseList.push(item);
@@ -159,6 +161,7 @@
         }
 
         function clearForm() {
+            document.getElementById('itemFiller').value = '';
             document.getElementById('itemName').value = '';
             document.getElementById('itemQuantity').value = '';
             document.getElementById('itemPrice').value = '';
@@ -187,15 +190,16 @@
                 total += item.total;
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
+                    <td>${item.filler}</td>
                     <td>${item.name}</td>
                     <td>${item.quantity}</td>
                     <td>${item.price}</td>
                     <td>${item.total}</td>
-                    <td><a href="${item.link}" target="_blank">${item.link ? '链接' : ''}</a></td>
+                    <td><a href="${item.link}" target="_blank">${item.link ? '链接 | Link' : ''}</a></td>
                     <td>${item.priority}</td>
                     <td>${item.notes}</td>
                     <td>${item.addedBy}</td>
-                    <td><button class="btn btn-danger" onclick="deleteItem(${idx})">删除</button></td>
+                    <td><button class="btn btn-danger" onclick="deleteItem(${idx})">删除 | Delete</button></td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -268,9 +272,9 @@
         function viewArchivedTable(key) {
             db.ref('purchaseList/history/' + key).once('value').then(snapshot => {
                 const period = snapshot.val();
-                let html = `<h4>周期详情</h4><div>开始: ${period.periodStart}<br>结束: ${period.periodEnd}<br>归档时间: ${period.archivedAt}<br>商品数: ${period.items.length}</div><table border='1' style='width:100%;margin-top:10px;'><thead><tr><th>商品名称</th><th>数量</th><th>单价</th><th>总价</th><th>商品链接</th><th>优先级</th><th>备注</th><th>添加人邮箱</th><th>添加时间</th></tr></thead><tbody>`;
+                let html = `<h4>周期详情 | Cycle Detail</h4><div>开始 | Start: ${period.periodStart}<br>结束 | End: ${period.periodEnd}<br>归档时间 | Archived: ${period.archivedAt}<br>商品数 | Items: ${period.items.length}</div><table border='1' style='width:100%;margin-top:10px;'><thead><tr><th>填写人 | Filler</th><th>商品名称 | Product Name</th><th>数量 | Quantity</th><th>单价 | Unit Price</th><th>总价 | Total Price</th><th>商品链接 | Product Link</th><th>优先级 | Priority</th><th>备注 | Notes</th><th>添加人邮箱 | Email</th><th>添加时间 | Added At</th></tr></thead><tbody>`;
                 period.items.forEach(item => {
-                    html += `<tr><td>${item.name}</td><td>${item.quantity}</td><td>${item.price}</td><td>${item.total}</td><td>${item.link}</td><td>${item.priority}</td><td>${item.notes}</td><td>${item.addedBy}</td><td>${item.addedAt}</td></tr>`;
+                    html += `<tr><td>${item.filler || ''}</td><td>${item.name}</td><td>${item.quantity}</td><td>${item.price}</td><td>${item.total}</td><td>${item.link}</td><td>${item.priority}</td><td>${item.notes}</td><td>${item.addedBy}</td><td>${item.addedAt}</td></tr>`;
                 });
                 html += '</tbody></table>';
                 document.getElementById('archivedListsContent').innerHTML = html;
@@ -280,21 +284,21 @@
         // ====== 导出采购单为Excel ======
         function exportCurrentListExcel() {
             if (!purchaseList || purchaseList.length === 0) {
-                alert('当前采购单为空！');
+                alert('当前采购单为空！ | The purchase list is empty!');
                 return;
             }
             const wsData = [
-                ['商品名称','数量','单价','总价','商品链接','优先级','备注','添加人邮箱','添加时间']
+                ['填写人 | Filler','商品名称 | Product Name','数量 | Quantity','单价 | Unit Price','总价 | Total Price','商品链接 | Product Link','优先级 | Priority','备注 | Notes','添加人邮箱 | Email','添加时间 | Added At']
             ];
             purchaseList.forEach(item => {
                 wsData.push([
-                    item.name, item.quantity, item.price, item.total, item.link, item.priority, item.notes, item.addedBy, item.addedAt
+                    item.filler, item.name, item.quantity, item.price, item.total, item.link, item.priority, item.notes, item.addedBy, item.addedAt
                 ]);
             });
             const ws = XLSX.utils.aoa_to_sheet(wsData);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, '采购单');
-            XLSX.writeFile(wb, `采购单_${dayjs().format('YYYYMMDD_HHmmss')}.xlsx`);
+            XLSX.utils.book_append_sheet(wb, ws, '采购单 | Purchase List');
+            XLSX.writeFile(wb, `采购单_PurchaseList_${dayjs().format('YYYYMMDD_HHmmss')}.xlsx`);
         }
 
         // ====== 审核历史采购单 ======
@@ -336,9 +340,9 @@
                 return;
             }
             const period = auditHistoryData[key];
-            let html = `<table border='1' style='width:100%;margin-top:10px;'><thead><tr><th>同意</th><th>商品名称</th><th>数量</th><th>单价</th><th>总价</th><th>商品链接</th><th>优先级</th><th>备注</th><th>添加人邮箱</th><th>添加时间</th></tr></thead><tbody>`;
+            let html = `<table border='1' style='width:100%;margin-top:10px;'><thead><tr><th>同意 | Approve</th><th>填写人 | Filler</th><th>商品名称 | Product Name</th><th>数量 | Quantity</th><th>单价 | Unit Price</th><th>总价 | Total Price</th><th>商品链接 | Product Link</th><th>优先级 | Priority</th><th>备注 | Notes</th><th>添加人邮箱 | Email</th><th>添加时间 | Added At</th></tr></thead><tbody>`;
             period.items.forEach((item, idx) => {
-                html += `<tr><td><input type='checkbox' checked onchange='auditCheckChange(${idx}, this.checked)'></td><td>${item.name}</td><td>${item.quantity}</td><td>${item.price}</td><td>${item.total}</td><td>${item.link}</td><td>${item.priority}</td><td>${item.notes}</td><td>${item.addedBy}</td><td>${item.addedAt}</td></tr>`;
+                html += `<tr><td><input type='checkbox' checked onchange='auditCheckChange(${idx}, this.checked)'></td><td>${item.filler || ''}</td><td>${item.name}</td><td>${item.quantity}</td><td>${item.price}</td><td>${item.total}</td><td>${item.link}</td><td>${item.priority}</td><td>${item.notes}</td><td>${item.addedBy}</td><td>${item.addedAt}</td></tr>`;
                 auditChecked[idx] = true;
             });
             html += '</tbody></table>';
@@ -354,20 +358,20 @@
             if (!auditCurrentKey || !auditHistoryData[auditCurrentKey]) return;
             const period = auditHistoryData[auditCurrentKey];
             const wsData = [
-                ['商品名称','数量','单价','总价','商品链接','优先级','备注','添加人邮箱','添加时间']
+                ['填写人 | Filler','商品名称 | Product Name','数量 | Quantity','单价 | Unit Price','总价 | Total Price','商品链接 | Product Link','优先级 | Priority','备注 | Notes','添加人邮箱 | Email','添加时间 | Added At']
             ];
             period.items.forEach((item, idx) => {
                 if (auditChecked[idx]) {
                     wsData.push([
-                        item.name, item.quantity, item.price, item.total, item.link, item.priority, item.notes, item.addedBy, item.addedAt
+                        item.filler || '', item.name, item.quantity, item.price, item.total, item.link, item.priority, item.notes, item.addedBy, item.addedAt
                     ]);
                 }
             });
-            if (wsData.length === 1) { alert('没有审核通过的商品！'); return; }
+            if (wsData.length === 1) { alert('没有审核通过的商品！ | No approved items!'); return; }
             const ws = XLSX.utils.aoa_to_sheet(wsData);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, '审核通过商品');
-            XLSX.writeFile(wb, `审核通过商品_${dayjs().format('YYYYMMDD_HHmmss')}.xlsx`);
+            XLSX.utils.book_append_sheet(wb, ws, '审核通过商品 | Approved Items');
+            XLSX.writeFile(wb, `审核通过商品_Approved_${dayjs().format('YYYYMMDD_HHmmss')}.xlsx`);
         }
 
         function removeDisagreedItems() {
