@@ -3,1510 +3,149 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>采购单自动填写与审核 - 多人在线协作版 | Purchase Order Management System - Multi-user Collaboration</title>
-    <!-- SheetJS library for Excel generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <!-- Socket.IO for real-time collaboration -->
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <title>采购清单协作系统（Firebase实时同步）</title>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
-        .container { max-width: 1200px; margin: auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
-        h1, h2 { text-align: center; color: #333; }
-        label { display: block; margin-top: 10px; font-weight: bold; }
-        input[type="text"], input[type="email"], input[type="number"], input[type="url"] {
-            width: calc(100% - 22px); padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px;
-        }
-        button {
-            background-color: #007bff; color: white; padding: 10px 15px; border: none;
-            border-radius: 4px; cursor: pointer; margin-top: 15px; margin-right: 10px;
-        }
-        button:hover { background-color: #0056b3; }
-        .error { color: red; font-size: 0.9em; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        .section { margin-top: 30px; padding-top: 20px; border-top: 1px dashed #ccc; }
-        #totalPrice { font-weight: bold; color: green; }
-        .item-row td:last-child { white-space: pre-wrap; word-break: break-all; } /* For remarks */
-        
-        /* 多人在线协作样式 */
-        .collaboration-panel {
-            background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px; margin-bottom: 20px;
-        }
-        .online-users {
-            display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px;
-        }
-        .user-badge {
-            background: #28a745; color: white; padding: 5px 10px; border-radius: 15px; font-size: 0.9em;
-        }
-        .user-badge.self { background: #007bff; }
-        .edit-history {
-            max-height: 200px; overflow-y: auto; background: white; border: 1px solid #ddd; padding: 10px; border-radius: 4px;
-        }
-        .edit-entry {
-            border-bottom: 1px solid #eee; padding: 5px 0; font-size: 0.9em;
-        }
-        .edit-entry:last-child { border-bottom: none; }
-        .edit-time { color: #666; font-size: 0.8em; }
-        .edit-user { font-weight: bold; color: #007bff; }
-        .edit-action { color: #28a745; }
-        .edit-item { color: #dc3545; }
-        
-        /* 实时编辑指示器 */
-        .editing-indicator {
-            position: fixed; top: 10px; right: 10px; background: #28a745; color: white; padding: 10px; border-radius: 5px; z-index: 1000;
-        }
-        .item-being-edited {
-            background-color: #fff3cd; border: 2px solid #ffc107;
-        }
-        
-        /* 响应式设计 */
-        @media (max-width: 768px) {
-            .container { max-width: 100%; margin: 10px; }
-            .online-users { flex-direction: column; }
-        }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f8f9fa; margin: 0; }
+        .container { max-width: 900px; margin: 30px auto; background: #fff; border-radius: 8px; box-shadow: 0 0 10px #ddd; padding: 30px; }
+        h2, h4 { color: #007bff; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background: #007bff; color: #fff; }
+        .btn { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; }
+        .btn-primary { background: #007bff; color: #fff; }
+        .btn-danger { background: #dc3545; color: #fff; }
+        .btn-secondary { background: #6c757d; color: #fff; }
+        .btn-warning { background: #ffc107; color: #000; }
+        .archived-modal { position: fixed; top: 5%; left: 10%; width: 80%; height: 80%; background: #fff; border: 2px solid #007bff; border-radius: 8px; z-index: 9999; overflow: auto; box-shadow: 0 0 20px #007bff55; display: none; }
+        .archived-modal-content { padding: 20px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>采购单填写 - 多人在线协作版 | Purchase Order - Multi-user Collaboration</h1>
-        
-        <!-- 多人在线协作面板 -->
-        <div class="collaboration-panel">
-            <h3>🔄 多人在线协作 | Multi-user Online Collaboration</h3>
-            
-            <!-- 用户登录区域 -->
-            <div id="loginArea">
-                <label for="username">您的姓名 | Your Name:</label>
-                <input type="text" id="username" placeholder="请输入您的姓名 | Please enter your name">
-                <label for="email">您的邮箱 | Your Email:</label>
-                <input type="email" id="email" placeholder="请输入您的邮箱 | Please enter your email">
-                <button type="button" onclick="login()">加入协作 | Join Collaboration</button>
-            </div>
-            
-            <!-- 在线用户显示 -->
-            <div id="onlineUsersArea" style="display: none;">
-                <h4>👥 在线用户 | Online Users (<span id="userCount">0</span>)</h4>
-                <div id="onlineUsers" class="online-users">
-                    <!-- 在线用户将在这里显示 -->
-                </div>
-                
-                <!-- 共享商品列表状态 -->
-                <h4>📦 共享商品列表状态 | Shared Items Status</h4>
-                <div id="sharedItemsStatus" style="background: white; border: 1px solid #ddd; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
-                    <div>当前共享商品数量 | Current Shared Items: <strong id="sharedItemCount">0</strong> 个</div>
-                    <div>采购商品 | Purchase Items: <span id="purchaseItemCount">0</span> 个</div>
-                    <div>审核商品 | Approval Items: <span id="approvalItemCount">0</span> 个</div>
-                    <div>审核文件 | Approval File: <span id="approvalFileNameDisplay">无</span></div>
-                    <div>最后更新时间 | Last Update: <span id="lastUpdateTime">-</span></div>
-                    <div>协作状态 | Collaboration Status: <span id="collaborationStatus" style="color: #28a745;">🟢 已启用</span></div>
-                    <div>同步状态 | Sync Status: <span id="syncStatus" style="color: #28a745;">🔄 同步中</span></div>
-                </div>
-                
-                <!-- 采购周期管理 -->
-                <h4>📅 采购周期管理 | Purchase Cycle Management</h4>
-                <div id="periodStatus" style="background: white; border: 1px solid #ddd; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
-                    <div>当前周期开始 | Current Period Start: <span id="currentPeriodStart">-</span></div>
-                    <div>下次更新时间 | Next Update Date: <span id="nextUpdateDate">-</span></div>
-                    <div>编辑状态 | Edit Status: <span id="editingStatus" style="color: #28a745;">🟢 允许编辑</span></div>
-                    <div>历史记录数量 | History Records: <span id="historyCount">0</span> 个周期</div>
-                    <button type="button" onclick="viewPurchaseHistory()" style="background-color: #17a2b8; margin-top: 10px;">📋 查看历史采购列表 | View History</button>
-                    <button type="button" onclick="forceUpdatePeriod()" style="background-color: #ffc107; color: black; margin-top: 10px; margin-left: 10px;">🔄 强制更新周期 | Force Update</button>
-                </div>
-                
-                <!-- 过往表格管理 -->
-                <h4>📊 过往表格管理 | Saved Tables Management</h4>
-                <div id="savedTablesStatus" style="background: white; border: 1px solid #ddd; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
-                    <div>保存的表格数量 | Saved Tables: <span id="savedTablesCount">0</span> 个</div>
-                    <button type="button" onclick="saveCurrentTable()" style="background-color: #28a745; margin-top: 10px;">💾 保存当前表格 | Save Current Table</button>
-                    <button type="button" onclick="viewSavedTables()" style="background-color: #17a2b8; margin-top: 10px; margin-left: 10px;">📋 查看保存的表格 | View Saved Tables</button>
-                </div>
-                
-                <!-- 编辑历史 -->
-                <h4>📝 编辑历史 | Edit History</h4>
-                <div id="editHistory" class="edit-history">
-                    <!-- 编辑记录将在这里显示 -->
-                </div>
-                
-                <button type="button" onclick="logoutUser()" style="background-color: #dc3545;">退出协作 | Logout</button>
-            </div>
+        <h2>采购清单协作系统（Firebase实时同步）</h2>
+        <div>
+            <label>用户名 | Username: <input id="username" type="text" style="margin-right:10px;"></label>
+            <button class="btn btn-primary" onclick="login()">加入协作 | Join</button>
+            <span id="userInfo"></span>
         </div>
-        
-        <form id="purchaseForm">
-            <label for="itemName">商品名称 | Product Name:</label>
-            <input type="text" id="itemName" required>
-
-            <label for="itemQuantity">数量 | Quantity:</label>
-            <input type="number" id="itemQuantity" min="1" required onchange="calculateTotal()">
-
-            <label for="itemPrice">单价 (元) | Unit Price (CNY):</label>
-            <input type="number" id="itemPrice" step="0.01" min="0" required onchange="calculateTotal()">
-
-            <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; margin: 10px 0;">
-                <strong>总价 | Total Price: <span id="totalPriceDisplay">0.00</span> 元</strong>
-            </div>
-
-            <label for="itemLink">商品链接 | Product Link:</label>
-            <input type="url" id="itemLink" placeholder="请输入商品链接 | Please enter product link">
-
-            <label for="itemPriority">优先级 | Priority:</label>
-            <select id="itemPriority">
-                <option value="low">低 | Low</option>
-                <option value="medium" selected>中 | Medium</option>
-                <option value="high">高 | High</option>
-            </select>
-
-            <label for="itemNotes">备注 | Notes:</label>
-            <input type="text" id="itemNotes">
-
-            <button type="button" onclick="addItem()">添加商品 | Add Item</button>
-            <button type="button" onclick="generateExcel()">生成采购单 (Excel) | Generate Purchase Order (Excel)</button>
-            <button type="button" onclick="clearList()">清空采购清单 | Clear Purchase List</button>
-        </form>
-
-        <h2>当前待采购商品列表 | Current Purchase Items List</h2>
-        <table id="currentItemsTable">
-            <thead>
-                <tr>
-                    <th>商品名称 | Product Name</th>
-                    <th>数量 | Quantity</th>
-                    <th>单价 | Unit Price</th>
-                    <th>总价 | Total Price</th>
-                    <th>商品链接 | Product Link</th>
-                    <th>优先级 | Priority</th>
-                    <th>备注 | Notes</th>
-                    <th>添加人 | Added By</th>
-                    <th>添加时间 | Added At</th>
-                    <th>操作 | Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Items will be added here -->
-            </tbody>
-        </table>
-
-        <div class="section">
-            <h2>采购单审核 | Purchase Order Approval</h2>
-            <p>上传需要审核的采购单 Excel 文件 | Upload Excel file for approval (通常是之前生成的以日期命名的文件 | usually previously generated files with date names)。</p>
-            <label for="excelFileToApprove">选择Excel文件进行审核 | Select Excel file for approval:</label>
-            <input type="file" id="excelFileToApprove" accept=".xlsx, .xls">
-            <button type="button" onclick="loadExcelForApproval()">加载并显示待审核项 | Load and Display Items for Approval</button>
-
-            <div id="approvalArea" style="display:none;">
-                <h3>待审核商品 | Items for Approval: <span id="approvalFileName"></span></h3>
-                <table id="approvalTable">
-                    <thead>
-                        <tr>
-                            <th>审核 (勾选为同意) | Approval (Check to Approve)</th>
-                            <th>填写人 | Filler Name</th>
-                            <th>邮箱 | Email</th>
-                            <th>名称 | Product Name</th>
-                            <th>型号 | Model</th>
-                            <th>数量 | Quantity</th>
-                            <th>单价 | Unit Price</th>
-                            <th>链接 | Link</th>
-                            <th>总价 | Total Price</th>
-                            <th>备注 | Remarks</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Approval items will be loaded here -->
-                    </tbody>
-                </table>
-                <button type="button" onclick="generateApprovedExcel()">生成审核通过的采购单 | Generate Approved Purchase Order</button>
-            </div>
-        </div>
-
-        <!-- 历史采购列表显示区域 -->
-        <div id="historyArea" style="display: none;" class="section">
-            <h2>📋 历史采购列表 | Purchase History</h2>
-            <div id="historyNavigation" style="margin-bottom: 20px;">
-                <button type="button" onclick="closeHistoryView()" style="background-color: #6c757d;">返回当前列表 | Back to Current List</button>
-                <span id="historyPeriodInfo" style="margin-left: 20px; font-weight: bold;"></span>
-            </div>
-            <table id="historyTable">
+        <hr>
+        <div id="mainArea" style="display:none;">
+            <h4>当前采购清单 | Current Purchase List</h4>
+            <form onsubmit="addItem(event)">
+                <input id="itemName" placeholder="商品名称 | Name" required>
+                <input id="itemQuantity" type="number" min="1" placeholder="数量 | Qty" required style="width:70px;">
+                <input id="itemPrice" type="number" min="0.01" step="0.01" placeholder="单价 | Price" required style="width:90px;">
+                <input id="itemLink" placeholder="商品链接 | Link">
+                <input id="itemPriority" placeholder="优先级 | Priority" value="medium" style="width:80px;">
+                <input id="itemNotes" placeholder="备注 | Notes">
+                <button class="btn btn-primary" type="submit">添加 | Add</button>
+                <button class="btn btn-warning" type="button" onclick="clearList()">清空 | Clear</button>
+            </form>
+            <table id="purchaseTable">
                 <thead>
                     <tr>
-                        <th>商品名称 | Product Name</th>
-                        <th>数量 | Quantity</th>
-                        <th>单价 | Unit Price</th>
-                        <th>总价 | Total Price</th>
-                        <th>商品链接 | Product Link</th>
-                        <th>优先级 | Priority</th>
-                        <th>备注 | Notes</th>
-                        <th>添加人 | Added By</th>
-                        <th>添加时间 | Added At</th>
+                        <th>商品名称</th><th>数量</th><th>单价</th><th>总价</th><th>商品链接</th><th>优先级</th><th>备注</th><th>添加人</th><th>操作</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <!-- 历史商品将在这里显示 -->
-                </tbody>
+                <tbody></tbody>
             </table>
-        </div>
-    </div>
-
-    <!-- 保存的表格显示区域 -->
-    <div id="savedTablesArea" style="display: none;">
-        <div class="container">
-            <div id="savedTableNavigation" style="margin-bottom: 20px;">
-                <button type="button" onclick="closeSavedTableView()" style="background-color: #6c757d;">返回当前列表 | Back to Current List</button>
-                <span id="savedTableInfo" style="margin-left: 20px; font-weight: bold;"></span>
+            <div style="margin:10px 0;">
+                <b>总金额 | Total: <span id="totalAmount">0.00</span> 元</b>
             </div>
-            <table id="savedTableBody">
-                <thead>
-                    <tr>
-                        <th>商品名称 | Product Name</th>
-                        <th>数量 | Quantity</th>
-                        <th>单价 | Unit Price</th>
-                        <th>总价 | Total Price</th>
-                        <th>商品链接 | Product Link</th>
-                        <th>优先级 | Priority</th>
-                        <th>备注 | Notes</th>
-                        <th>添加人 | Added By</th>
-                        <th>添加时间 | Added At</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- 保存的表格数据将在这里显示 -->
-                </tbody>
-            </table>
+            <div>
+                <b>周期开始 | Period Start:</b> <span id="periodStart"></span>
+                <b>下次归档 | Next Archive:</b> <span id="nextArchive"></span>
+                <button class="btn btn-secondary" onclick="forceArchive()">立即归档 | Archive Now</button>
+            </div>
+            <div style="margin-top:20px;">
+                <button class="btn btn-primary" onclick="showArchivedLists()">🗂️ 查看历史采购列表 | View Archived Lists</button>
+            </div>
         </div>
     </div>
-
+    <!-- 历史采购列表弹窗 -->
+    <div class="archived-modal" id="archivedListsArea">
+        <div class="archived-modal-content">
+            <button class="btn btn-secondary" onclick="closeArchivedListsView()">关闭 | Close</button>
+            <h4>历史采购列表 | Archived Purchase Lists</h4>
+            <div id="archivedListsContent"></div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
     <script>
-        let purchaseItems = []; // Array to store current purchase items
-        let itemsForApproval = []; // Array to store items loaded from Excel for approval
-        
-        // 多人在线协作变量
+        // ====== Firebase 配置与初始化 ======
+        const firebaseConfig = {
+            apiKey: "AIzaSyAxzDkV5O621f3pVKdQN7PZ9KPbLSljG5E",
+            authDomain: "purchaselist-7891f.firebaseapp.com",
+            databaseURL: "https://purchaselist-7891f-default-rtdb.firebaseio.com",
+            projectId: "purchaselist-7891f",
+            storageBucket: "purchaselist-7891f.firebasestorage.app",
+            messagingSenderId: "887629105138",
+            appId: "1:887629105138:web:1dd1c587684216721ccd6b",
+            measurementId: "G-6BZB8CFNTZ"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // ====== 全局变量 ======
         let currentUser = null;
-        let onlineUsers = [];
-        let editHistory = [];
-        let isCollaborationEnabled = false;
-        let sharedPurchaseItems = []; // 共享的商品列表
-        let sharedApprovalItems = []; // 共享的审核商品列表
-        let sharedApprovalFileName = ''; // 共享的审核文件名
-        
-        // 历史采购列表管理
-        let purchaseHistory = []; // 历史采购列表
-        let currentPeriodStart = null; // 当前周期开始时间
-        let nextUpdateDate = null; // 下次更新时间
-        let isEditingEnabled = true; // 是否允许编辑
-        
-        // 过往表格管理
-        let savedTables = []; // 保存的表格列表
-        let currentTableId = null; // 当前表格ID
-        
-        // 实时同步配置
-        let syncInterval = null;
-        let lastSyncTime = 0;
-        const SYNC_INTERVAL = 2000; // 2秒同步一次
+        let periodStart = null;
+        let purchaseList = [];
+        let archiveTimer = null;
 
-        // 初始化协作功能
-        function initializeCollaboration() {
-            console.log('协作功能已初始化');
-            isCollaborationEnabled = true;
-            
-            // 从localStorage加载共享数据
-            loadSharedData();
-            
-            // 加载保存的表格
-            loadSavedTables();
-            
-            // 初始化共享数据
-            if (sharedPurchaseItems.length === 0) {
-                sharedPurchaseItems = [...purchaseItems];
-                saveSharedData();
-            } else {
-                // 同步其他用户的数据
-                purchaseItems = [...sharedPurchaseItems];
-                renderCurrentItemsTable();
-            }
-            
-            // 初始化共享审核数据
-            if (sharedApprovalItems.length === 0) {
-                sharedApprovalItems = [...itemsForApproval];
-                saveSharedData();
-            } else {
-                // 同步其他用户的审核数据
-                itemsForApproval = [...sharedApprovalItems];
-                if (itemsForApproval.length > 0) {
-                    document.getElementById('approvalFileName').textContent = `(文件 | file: ${sharedApprovalFileName})`;
-                    document.getElementById('approvalArea').style.display = 'block';
-                    renderApprovalTable();
-                }
-            }
-            
-            // 初始化采购周期
-            initializePurchasePeriod();
-            
-            // 更新状态显示
-            updateSharedItemsStatus();
-            
-            // 启动实时同步
-            startRealTimeSync();
-        }
-
-        // 初始化localStorage同步
-        function initializeLocalStorageSync() {
-            // 监听storage事件以同步数据（其他标签页的更改）
-            window.addEventListener('storage', function(e) {
-                if (e.key === 'sharedPurchaseData' && e.newValue) {
-                    handleDataUpdate(e.newValue);
-                }
-                if (e.key === 'onlineUsers' && e.newValue) {
-                    try {
-                        onlineUsers = JSON.parse(e.newValue);
-                        updateOnlineUsersDisplay();
-                    } catch (error) {
-                        console.error('同步在线用户失败:', error);
-                    }
-                }
-                if (e.key === 'editHistory' && e.newValue) {
-                    try {
-                        editHistory = JSON.parse(e.newValue);
-                        updateEditHistoryDisplay();
-                    } catch (error) {
-                        console.error('同步编辑历史失败:', error);
-                    }
-                }
-                if (e.key === 'savedTables' && e.newValue) {
-                    try {
-                        savedTables = JSON.parse(e.newValue);
-                        updateSharedItemsStatus();
-                    } catch (error) {
-                        console.error('同步保存表格失败:', error);
-                    }
-                }
-            });
-            
-            // 定期检查数据更新（当前标签页的更改）
-            setInterval(() => {
-                if (isCollaborationEnabled && currentUser) {
-                    checkForDataUpdates();
-                }
-            }, 1000); // 每秒检查一次
-        }
-
-        // 启动实时同步
-        function startRealTimeSync() {
-            if (syncInterval) {
-                clearInterval(syncInterval);
-            }
-            
-            syncInterval = setInterval(() => {
-                if (isCollaborationEnabled && currentUser) {
-                    performRealTimeSync();
-                }
-            }, SYNC_INTERVAL);
-        }
-
-        // 执行实时同步
-        function performRealTimeSync() {
-            const currentTime = Date.now();
-            if (currentTime - lastSyncTime >= SYNC_INTERVAL) {
-                // 检查数据更新
-                checkForDataUpdates();
-                
-                lastSyncTime = currentTime;
-            }
-        }
-
-        // 处理数据更新
-        function handleDataUpdate(newData) {
-            try {
-                const data = JSON.parse(newData);
-                const updateTime = data.lastUpdate || 0;
-                const currentLastUpdate = localStorage.getItem('lastDataUpdate') || '0';
-                
-                // 如果发现新的更新
-                if (updateTime > parseInt(currentLastUpdate)) {
-                    console.log('收到实时数据更新:', data);
-                    
-                    // 更新本地数据
-                    sharedPurchaseItems = data.purchaseItems || [];
-                    sharedApprovalItems = data.approvalItems || [];
-                    sharedApprovalFileName = data.approvalFileName || '';
-                    
-                    // 同步到当前用户界面
-                    purchaseItems = [...sharedPurchaseItems];
-                    itemsForApproval = [...sharedApprovalItems];
-                    
-                    // 更新显示
-                    renderCurrentItemsTable();
-                    if (itemsForApproval.length > 0) {
-                        document.getElementById('approvalFileName').textContent = `(文件 | file: ${sharedApprovalFileName})`;
-                        document.getElementById('approvalArea').style.display = 'block';
-                        renderApprovalTable();
-                    }
-                    
-                    // 更新状态显示
-                    updateSharedItemsStatus();
-                    
-                    // 记录最后更新时间
-                    localStorage.setItem('lastDataUpdate', updateTime.toString());
-                    
-                    // 添加同步记录
-                    if (data.updateUser && data.updateUser !== currentUser?.name) {
-                        addEditHistory('实时同步 | Real-time Sync', `同步了 | synced ${data.updateUser} 的更新 | updates`);
-                    }
-                }
-            } catch (error) {
-                console.error('处理数据更新失败:', error);
-            }
-        }
-
-        // 用户登录
+        // ====== 登录 ======
         function login() {
             const username = document.getElementById('username').value.trim();
-            const email = document.getElementById('email').value.trim();
-            
-            if (!username || !email) {
-                alert('请输入用户名和邮箱 | Please enter username and email');
-                return;
-            }
-            
-            currentUser = { name: username, email: email };
-            
-            // 添加到在线用户列表
-            if (!onlineUsers.find(user => user.name === username)) {
-                onlineUsers.push(currentUser);
-            }
-            
-            // 实时同步用户状态
-            if (isCollaborationEnabled) {
-                localStorage.setItem('onlineUsers', JSON.stringify(onlineUsers));
-                
-                // 触发storage事件以通知其他标签页
-                window.dispatchEvent(new StorageEvent('storage', {
-                    key: 'onlineUsers',
-                    newValue: JSON.stringify(onlineUsers),
-                    oldValue: localStorage.getItem('onlineUsers'),
-                    storageArea: localStorage
-                }));
-                
-                addEditHistory('用户登录 | User Login', `${username} 已登录 | logged in`);
-            }
-            
-            document.getElementById('loginArea').style.display = 'none';
-            document.getElementById('collaborationArea').style.display = 'block';
-            document.getElementById('userInfo').textContent = `当前用户 | Current User: ${username}`;
-            
-            updateOnlineUsersDisplay();
+            if (!username) { alert('请输入用户名'); return; }
+            currentUser = username;
+            document.getElementById('userInfo').textContent = `当前用户: ${username}`;
+            document.getElementById('mainArea').style.display = '';
+            loadCurrentList();
         }
 
-        // 用户登出
-        function logoutUser() {
-            if (currentUser) {
-                addEditHistory('用户退出 | User Logout', `${currentUser.name} 退出了协作 | left collaboration`);
-                onlineUsers = onlineUsers.filter(user => user.name !== currentUser.name);
-                currentUser = null;
-                
-                // 更新localStorage并触发同步
-                localStorage.setItem('onlineUsers', JSON.stringify(onlineUsers));
-                window.dispatchEvent(new StorageEvent('storage', {
-                    key: 'onlineUsers',
-                    newValue: JSON.stringify(onlineUsers),
-                    oldValue: localStorage.getItem('onlineUsers'),
-                    storageArea: localStorage
-                }));
-                
-                // 更新界面
-                document.getElementById('loginArea').style.display = 'block';
-                document.getElementById('collaborationArea').style.display = 'none';
-                document.getElementById('username').value = '';
-                document.getElementById('email').value = '';
-                
-                updateOnlineUsersDisplay();
-            }
-        }
-
-        // 更新在线用户显示
-        function updateOnlineUsersDisplay() {
-            const usersContainer = document.getElementById('onlineUsers');
-            const userCount = document.getElementById('userCount');
-            
-            usersContainer.innerHTML = '';
-            userCount.textContent = onlineUsers.length;
-            
-            onlineUsers.forEach(user => {
-                const userBadge = document.createElement('div');
-                userBadge.className = `user-badge ${user.name === currentUser?.name ? 'self' : ''}`;
-                userBadge.textContent = user.name;
-                usersContainer.appendChild(userBadge);
-            });
-        }
-
-        // 添加编辑历史记录
-        function addEditHistory(action, description) {
+        // ====== 采购清单操作 ======
+        function addItem(e) {
+            e.preventDefault();
             if (!currentUser) return;
-            
-            const editEntry = {
-                id: Date.now(),
-                user: currentUser.name,
-                action: action,
-                description: description,
-                timestamp: new Date()
-            };
-            
-            editHistory.unshift(editEntry);
-            
-            // 限制历史记录数量
-            if (editHistory.length > 50) {
-                editHistory = editHistory.slice(0, 50);
-            }
-            
-            // 保存到localStorage
-            localStorage.setItem('editHistory', JSON.stringify(editHistory));
-            
-            updateEditHistoryDisplay();
-            
-            // 触发storage事件以通知其他标签页
-            window.dispatchEvent(new StorageEvent('storage', {
-                key: 'editHistory',
-                newValue: JSON.stringify(editHistory),
-                oldValue: localStorage.getItem('editHistory'),
-                storageArea: localStorage
-            }));
-        }
-
-        // 更新编辑历史显示
-        function updateEditHistoryDisplay() {
-            const historyContainer = document.getElementById('editHistory');
-            historyContainer.innerHTML = '';
-            
-            editHistory.forEach(entry => {
-                const entryDiv = document.createElement('div');
-                entryDiv.className = 'edit-entry';
-                
-                const timeStr = entry.timestamp.toLocaleTimeString();
-                entryDiv.innerHTML = `
-                    <span class="edit-time">${timeStr}</span> - 
-                    <span class="edit-user">${entry.user}</span> 
-                    <span class="edit-action">${entry.action}</span>: 
-                    <span class="edit-item">${entry.description}</span>
-                `;
-                
-                historyContainer.appendChild(entryDiv);
-            });
-        }
-
-        // 更新共享状态显示
-        function updateSharedItemsStatus() {
-            const sharedItemCount = document.getElementById('sharedItemCount');
-            const purchaseItemCount = document.getElementById('purchaseItemCount');
-            const approvalItemCount = document.getElementById('approvalItemCount');
-            const approvalFileNameDisplay = document.getElementById('approvalFileNameDisplay');
-            const lastUpdateTime = document.getElementById('lastUpdateTime');
-            const collaborationStatus = document.getElementById('collaborationStatus');
-            const syncStatus = document.getElementById('syncStatus');
-            const savedTablesCount = document.getElementById('savedTablesCount');
-
-            if (sharedItemCount) {
-                sharedItemCount.textContent = sharedPurchaseItems.length;
-            }
-            if (purchaseItemCount) {
-                purchaseItemCount.textContent = purchaseItems.length;
-            }
-            if (approvalItemCount) {
-                approvalItemCount.textContent = itemsForApproval.length;
-            }
-            if (approvalFileNameDisplay) {
-                approvalFileNameDisplay.textContent = sharedApprovalFileName || '无';
-            }
-            if (lastUpdateTime) {
-                const lastUpdate = localStorage.getItem('lastDataUpdate');
-                if (lastUpdate) {
-                    const date = new Date(parseInt(lastUpdate));
-                    lastUpdateTime.textContent = date.toLocaleString('zh-CN');
-                } else {
-                    lastUpdateTime.textContent = '-';
-                }
-            }
-            if (collaborationStatus) {
-                if (isCollaborationEnabled && currentUser) {
-                    collaborationStatus.innerHTML = '🟢 已启用 | Enabled';
-                    collaborationStatus.style.color = '#28a745';
-                } else {
-                    collaborationStatus.innerHTML = '🔴 未启用 | Disabled';
-                    collaborationStatus.style.color = '#dc3545';
-                }
-            }
-            if (syncStatus) {
-                if (isCollaborationEnabled && currentUser) {
-                    syncStatus.innerHTML = '🔄 同步中 | Syncing';
-                    syncStatus.style.color = '#28a745';
-                } else {
-                    syncStatus.innerHTML = '⏸️ 已暂停 | Paused';
-                    syncStatus.style.color = '#ffc107';
-                }
-            }
-            if (savedTablesCount) {
-                savedTablesCount.textContent = savedTables.length;
-            }
-        }
-
-        // 同步审核商品列表到所有用户
-        function syncApprovalItems() {
-            if (isCollaborationEnabled) {
-                sharedApprovalItems = [...itemsForApproval];
-                // 更新状态显示
-                updateSharedItemsStatus();
-                // 保存到localStorage
-                saveSharedData();
-                // 记录更新时间
-                localStorage.setItem('lastDataUpdate', Date.now().toString());
-                // 模拟广播给其他用户
-                broadcastApprovalItemsUpdate();
-            }
-        }
-
-        // 模拟广播审核商品列表更新
-        function broadcastApprovalItemsUpdate() {
-            console.log('广播审核商品列表更新:', sharedApprovalItems);
-            
-            // 模拟其他用户接收更新
-            setTimeout(() => {
-                if (onlineUsers.length > 1) {
-                    const otherUsers = onlineUsers.filter(user => user.name !== currentUser.name);
-                    if (otherUsers.length > 0) {
-                        otherUsers.forEach(user => {
-                            console.log(`${user.name} 收到了审核商品列表更新`);
-                            // 在实际项目中，这里会通过WebSocket发送数据
-                        });
-                    }
-                }
-            }, 100);
-        }
-
-        // 同步商品列表到所有用户
-        function syncPurchaseItems() {
-            if (isCollaborationEnabled) {
-                sharedPurchaseItems = [...purchaseItems];
-                // 更新状态显示
-                updateSharedItemsStatus();
-                // 保存到localStorage
-                saveSharedData();
-                // 记录更新时间
-                localStorage.setItem('lastDataUpdate', Date.now().toString());
-                // 模拟广播给其他用户
-                broadcastPurchaseItemsUpdate();
-            }
-        }
-
-        // 模拟广播商品列表更新
-        function broadcastPurchaseItemsUpdate() {
-            console.log('广播商品列表更新:', sharedPurchaseItems);
-            
-            // 模拟其他用户接收更新
-            setTimeout(() => {
-                if (onlineUsers.length > 1) {
-                    const otherUsers = onlineUsers.filter(user => user.name !== currentUser.name);
-                    if (otherUsers.length > 0) {
-                        otherUsers.forEach(user => {
-                            console.log(`${user.name} 收到了商品列表更新`);
-                            // 在实际项目中，这里会通过WebSocket发送数据
-                        });
-                    }
-                }
-            }, 100);
-        }
-
-        // 模拟广播编辑操作
-        function broadcastEdit(editEntry) {
-            // 在实际项目中，这里会通过WebSocket发送给服务器
-            console.log('广播编辑操作:', editEntry);
-            
-            // 模拟其他用户接收
-            setTimeout(() => {
-                if (onlineUsers.length > 1) {
-                    // 模拟其他用户的操作
-                    const otherUsers = onlineUsers.filter(user => user.name !== currentUser.name);
-                    if (otherUsers.length > 0) {
-                        const randomUser = otherUsers[Math.floor(Math.random() * otherUsers.length)];
-                        console.log(`${randomUser.name} 收到了编辑通知`);
-                    }
-                }
-            }, 100);
-        }
-
-        // 计算总价
-        function calculateTotal() {
-            const quantity = parseInt(document.getElementById('itemQuantity').value) || 0;
-            const price = parseFloat(document.getElementById('itemPrice').value) || 0;
-            const total = quantity * price;
-            document.getElementById('totalPriceDisplay').textContent = total.toFixed(2);
-        }
-
-        // 添加商品到采购清单
-        function addItem() {
             const name = document.getElementById('itemName').value.trim();
             const quantity = parseInt(document.getElementById('itemQuantity').value);
             const price = parseFloat(document.getElementById('itemPrice').value);
             const link = document.getElementById('itemLink').value.trim();
-            const priority = document.getElementById('itemPriority').value;
+            const priority = document.getElementById('itemPriority').value.trim();
             const notes = document.getElementById('itemNotes').value.trim();
-
-            if (!name || !quantity || !price) {
-                alert('请填写商品名称、数量和单价 | Please fill in product name, quantity and unit price');
-                return;
-            }
-
-            const total = quantity * price;
-            const newItem = {
-                name: name,
-                quantity: quantity,
-                price: price,
-                total: total,
-                link: link,
-                priority: priority,
-                notes: notes,
-                addedBy: currentUser?.name || 'Unknown',
-                addedAt: new Date().toLocaleString('zh-CN')
+            if (!name || !quantity || !price) { alert('请填写完整信息'); return; }
+            const item = {
+                name, quantity, price, total: +(quantity * price).toFixed(2), link, priority, notes,
+                addedBy: currentUser, addedAt: dayjs().format('YYYY-MM-DD HH:mm:ss')
             };
-
-            purchaseItems.push(newItem);
-            
-            // 同步到共享数据
-            if (isCollaborationEnabled) {
-                sharedPurchaseItems = [...purchaseItems];
-                saveSharedData();
-            }
-
-            renderCurrentItemsTable();
+            purchaseList.push(item);
+            db.ref('purchaseList/current').set({
+                items: purchaseList,
+                periodStart: periodStart
+            });
             clearForm();
-            
-            // 添加编辑记录
-            if (currentUser) {
-                addEditHistory('添加商品 | Add Item', `${currentUser.name} 添加了商品 | added item: ${name} (${quantity}个 | items, ${price.toFixed(2)}元/个 | yuan each)`);
-            }
         }
 
-        // 删除商品
-        function deleteItem(index) {
-            if (confirm('确定要删除这个商品吗？ | Are you sure you want to delete this item?')) {
-                const deletedItem = purchaseItems[index];
-                purchaseItems.splice(index, 1);
-                
-                // 同步到共享数据
-                if (isCollaborationEnabled) {
-                    sharedPurchaseItems = [...purchaseItems];
-                    saveSharedData();
-                }
-                
-                renderCurrentItemsTable();
-                
-                // 添加编辑记录
-                if (currentUser) {
-                    addEditHistory('删除商品 | Delete Item', `${currentUser.name} 删除了商品 | deleted item: ${deletedItem.name}`);
-                }
-            }
+        function deleteItem(idx) {
+            if (!confirm('确定要删除该商品？')) return;
+            purchaseList.splice(idx, 1);
+            db.ref('purchaseList/current').set({
+                items: purchaseList,
+                periodStart: periodStart
+            });
         }
 
-        // 清空采购清单
         function clearList() {
-            if (confirm('确定要清空采购清单吗？ | Are you sure you want to clear the purchase list?')) {
-                purchaseItems = [];
-                
-                // 同步到共享数据
-                if (isCollaborationEnabled) {
-                    sharedPurchaseItems = [];
-                    saveSharedData();
-                }
-                
-                renderCurrentItemsTable();
-                
-                // 添加编辑记录
-                if (currentUser) {
-                    addEditHistory('清空列表 | Clear List', `${currentUser.name} 清空了采购清单 | cleared purchase list`);
-                }
-            }
-        }
-
-        // 生成Excel文件
-        function generateExcel() {
-            if (purchaseItems.length === 0) {
-                alert('没有商品可以导出 | No items to export');
-                return;
-            }
-
-            // 创建工作簿
-            const wb = XLSX.utils.book_new();
-            
-            // 准备数据，添加序号和格式化
-            const excelData = purchaseItems.map((item, index) => ({
-                '序号 | No.': index + 1,
-                '商品名称 | Product Name': item.name,
-                '数量 | Quantity': item.quantity,
-                '单价 | Unit Price (CNY)': item.price,
-                '总价 | Total Price (CNY)': item.total,
-                '商品链接 | Product Link': item.link,
-                '优先级 | Priority': item.priority,
-                '备注 | Notes': item.notes,
-                '添加人 | Added By': item.addedBy,
-                '添加时间 | Added At': item.addedAt
-            }));
-
-            // 创建工作表
-            const ws = XLSX.utils.json_to_sheet(excelData);
-            
-            // 设置列宽
-            const colWidths = [
-                { wch: 8 },   // 序号
-                { wch: 25 },  // 商品名称
-                { wch: 10 },  // 数量
-                { wch: 15 },  // 单价
-                { wch: 15 },  // 总价
-                { wch: 40 },  // 商品链接
-                { wch: 12 },  // 优先级
-                { wch: 20 },  // 备注
-                { wch: 15 },  // 添加人
-                { wch: 20 }   // 添加时间
-            ];
-            ws['!cols'] = colWidths;
-
-            // 设置标题行样式
-            const range = XLSX.utils.decode_range(ws['!ref']);
-            for (let col = range.s.c; col <= range.e.c; col++) {
-                const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-                if (!ws[cellAddress]) continue;
-                
-                ws[cellAddress].s = {
-                    font: { bold: true, color: { rgb: "FFFFFF" } },
-                    fill: { fgColor: { rgb: "4472C4" } },
-                    alignment: { horizontal: "center", vertical: "center" },
-                    border: {
-                        top: { style: "thin" },
-                        bottom: { style: "thin" },
-                        left: { style: "thin" },
-                        right: { style: "thin" }
-                    }
-                };
-            }
-
-            // 设置数据行样式
-            for (let row = 1; row <= range.e.r; row++) {
-                for (let col = range.s.c; col <= range.e.c; col++) {
-                    const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
-                    if (!ws[cellAddress]) continue;
-                    
-                    ws[cellAddress].s = {
-                        alignment: { horizontal: "center", vertical: "center" },
-                        border: {
-                            top: { style: "thin" },
-                            bottom: { style: "thin" },
-                            left: { style: "thin" },
-                            right: { style: "thin" }
-                        }
-                    };
-                    
-                    // 为数字列设置特殊格式
-                    if (col === 2 || col === 3 || col === 4) { // 数量、单价、总价列
-                        ws[cellAddress].s.numFmt = "#,##0.00";
-                    }
-                }
-            }
-
-            // 添加工作表到工作簿
-            XLSX.utils.book_append_sheet(wb, ws, "采购清单 | Purchase List");
-            
-            // 生成文件名
-            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-            const fileName = `采购清单_${timestamp}.xlsx`;
-            
-            // 导出文件
-            XLSX.writeFile(wb, fileName);
-            
-            // 将数据添加到审核列表
-            itemsForApproval = [...purchaseItems];
-            sharedApprovalFileName = fileName;
-            
-            // 实时同步审核数据
-            if (isCollaborationEnabled) {
-                sharedApprovalItems = [...itemsForApproval];
-                saveSharedData();
-                addEditHistory('生成Excel | Generate Excel', `${currentUser?.name || 'Unknown'} 生成了 | generated ${fileName}`);
-            }
-            
-            // 显示审核区域
-            document.getElementById('approvalFileName').textContent = `(文件 | file: ${fileName})`;
-            document.getElementById('approvalArea').style.display = 'block';
-            renderApprovalTable();
-            
-            alert(`Excel文件已生成: ${fileName} | Excel file generated: ${fileName}`);
-        }
-
-        function renderCurrentItemsTable() {
-            const tbody = document.getElementById('currentItemsTable').getElementsByTagName('tbody')[0];
-            tbody.innerHTML = ''; // Clear existing rows
-
-            purchaseItems.forEach((item, index) => {
-                const row = tbody.insertRow();
-                row.className = 'item-row';
-                row.insertCell().textContent = item.name;
-                row.insertCell().textContent = item.quantity;
-                row.insertCell().textContent = item.price.toFixed(2);
-                row.insertCell().textContent = item.total.toFixed(2);
-                row.insertCell().textContent = item.link;
-                row.insertCell().textContent = item.priority;
-                row.insertCell().textContent = item.notes;
-                row.insertCell().textContent = item.addedBy;
-                row.insertCell().textContent = item.addedAt;
-                
-                const actionCell = row.insertCell();
-                const removeButton = document.createElement('button');
-                removeButton.textContent = '移除';
-                removeButton.onclick = () => deleteItem(index);
-                actionCell.appendChild(removeButton);
+            if (!confirm('确定要清空采购清单？')) return;
+            purchaseList = [];
+            db.ref('purchaseList/current').set({
+                items: [],
+                periodStart: periodStart
             });
         }
 
-        function loadExcelForApproval() {
-            const fileInput = document.getElementById('excelFileToApprove');
-            if (fileInput.files.length === 0) {
-                alert('请先选择一个Excel文件。 | Please select an Excel file first.');
-                return;
-            }
-            const file = fileInput.files[0];
-            document.getElementById('approvalFileName').textContent = `(文件 | file: ${file.name})`;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, {type: 'array'});
-                    const firstSheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[firstSheetName];
-                    itemsForApproval = XLSX.utils.sheet_to_json(worksheet, { defval: "" }); // Use defval to handle empty cells
-
-                    renderApprovalTable();
-                    document.getElementById('approvalArea').style.display = 'block';
-                    
-                    // 同步审核商品到所有用户
-                    sharedApprovalFileName = file.name;
-                    syncApprovalItems();
-                    
-                    // 添加编辑记录
-                    if (currentUser) {
-                        addEditHistory('上传审核文件 | Upload Approval File', `上传了 | uploaded ${file.name} 进行审核 | for approval (${itemsForApproval.length} 个商品 | items)`);
-                    }
-                } catch (error) {
-                    console.error("Error reading Excel file:", error);
-                    alert("无法读取或解析Excel文件。请确保文件格式正确且未损坏。\n错误 | Error: " + error.message + "\nUnable to read or parse Excel file. Please ensure the file format is correct and not corrupted.");
-                    document.getElementById('approvalArea').style.display = 'none';
-                }
-            };
-            reader.onerror = function(e) {
-                console.error("FileReader error:", e);
-                alert("读取文件时发生错误。 | Error occurred while reading file.");
-                document.getElementById('approvalArea').style.display = 'none';
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        function renderApprovalTable() {
-            const tbody = document.getElementById('approvalTable').getElementsByTagName('tbody')[0];
-            tbody.innerHTML = ''; // Clear existing rows
-
-            itemsForApproval.forEach((item, index) => {
-                const row = tbody.insertRow();
-                const approvalCell = row.insertCell();
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.id = `approve_${index}`;
-                checkbox.checked = true; // Default to approved
-                approvalCell.appendChild(checkbox);
-
-                // Ensure all expected columns exist, even if empty in the Excel
-                const expectedCols = ["填写人", "填写人邮箱", "名称", "型号", "数量", "单价", "链接", "总价", "商品备注"];
-                expectedCols.forEach(colName => {
-                    let cellValue = item[colName];
-                    if (colName === "单价" || colName === "总价") {
-                        cellValue = typeof cellValue === 'number' ? cellValue.toFixed(2) : (parseFloat(cellValue) || 0).toFixed(2);
-                    } else if (colName === "数量") {
-                         cellValue = parseInt(cellValue) || 0;
-                    }
-                    row.insertCell().textContent = cellValue === undefined || cellValue === null ? "" : cellValue;
-                });
-            });
-        }
-
-        function generateApprovedExcel() {
-            const approvedItems = [];
-            itemsForApproval.forEach((item, index) => {
-                const checkbox = document.getElementById(`approve_${index}`);
-                if (checkbox && checkbox.checked) {
-                    // 重构商品数据，确保正确的列顺序和数据类型
-                    const approvedItem = {
-                        "序号 | No.": approvedItems.length + 1,
-                        "商品名称 | Product Name": item.name || "",
-                        "数量 | Quantity": parseInt(item.quantity) || 0,
-                        "单价 | Unit Price (CNY)": parseFloat(item.price) || 0,
-                        "总价 | Total Price (CNY)": parseFloat(item.total) || 0,
-                        "商品链接 | Product Link": item.link || "",
-                        "优先级 | Priority": item.priority || "medium",
-                        "备注 | Notes": item.notes || "",
-                        "添加人 | Added By": item.addedBy || "",
-                        "添加时间 | Added At": item.addedAt || "",
-                        "审核状态 | Approval Status": "已通过 | Approved",
-                        "审核人 | Approved By": currentUser?.name || "Unknown",
-                        "审核时间 | Approval Time": new Date().toLocaleString('zh-CN')
-                    };
-                    // 确保总价正确
-                    approvedItem["总价 | Total Price (CNY)"] = parseFloat((approvedItem["数量 | Quantity"] * approvedItem["单价 | Unit Price (CNY)"]).toFixed(2));
-                    approvedItems.push(approvedItem);
-                }
-            });
-
-            if (approvedItems.length === 0) {
-                alert('没有勾选任何审核通过的商品。 | No approved items selected.');
-                return;
-            }
-
-            // 创建工作簿
-            const wb = XLSX.utils.book_new();
-            
-            // 创建工作表
-            const ws = XLSX.utils.json_to_sheet(approvedItems);
-            
-            // 设置列宽
-            const colWidths = [
-                { wch: 8 },   // 序号
-                { wch: 25 },  // 商品名称
-                { wch: 10 },  // 数量
-                { wch: 15 },  // 单价
-                { wch: 15 },  // 总价
-                { wch: 40 },  // 商品链接
-                { wch: 12 },  // 优先级
-                { wch: 20 },  // 备注
-                { wch: 15 },  // 添加人
-                { wch: 20 },  // 添加时间
-                { wch: 15 },  // 审核状态
-                { wch: 15 },  // 审核人
-                { wch: 20 }   // 审核时间
-            ];
-            ws['!cols'] = colWidths;
-
-            // 设置标题行样式
-            const range = XLSX.utils.decode_range(ws['!ref']);
-            for (let col = range.s.c; col <= range.e.c; col++) {
-                const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-                if (!ws[cellAddress]) continue;
-                
-                ws[cellAddress].s = {
-                    font: { bold: true, color: { rgb: "FFFFFF" } },
-                    fill: { fgColor: { rgb: "28A745" } }, // 绿色主题表示审核通过
-                    alignment: { horizontal: "center", vertical: "center" },
-                    border: {
-                        top: { style: "thin" },
-                        bottom: { style: "thin" },
-                        left: { style: "thin" },
-                        right: { style: "thin" }
-                    }
-                };
-            }
-
-            // 设置数据行样式
-            for (let row = 1; row <= range.e.r; row++) {
-                for (let col = range.s.c; col <= range.e.c; col++) {
-                    const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
-                    if (!ws[cellAddress]) continue;
-                    
-                    ws[cellAddress].s = {
-                        alignment: { horizontal: "center", vertical: "center" },
-                        border: {
-                            top: { style: "thin" },
-                            bottom: { style: "thin" },
-                            left: { style: "thin" },
-                            right: { style: "thin" }
-                        }
-                    };
-                    
-                    // 为数字列设置特殊格式
-                    if (col === 2 || col === 3 || col === 4) { // 数量、单价、总价列
-                        ws[cellAddress].s.numFmt = "#,##0.00";
-                    }
-                    
-                    // 为审核状态列设置特殊颜色
-                    if (col === 10) { // 审核状态列
-                        ws[cellAddress].s.fill = { fgColor: { rgb: "D4EDDA" } }; // 浅绿色背景
-                    }
-                }
-            }
-
-            // 添加工作表到工作簿
-            XLSX.utils.book_append_sheet(wb, ws, "审核通过采购单 | Approved Purchase List");
-
-            const today = new Date();
-            const dateString = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
-            const originalFileName = document.getElementById('excelFileToApprove').files[0]?.name.replace(/\.xlsx?$/, '') || '采购单';
-            const fileName = `${originalFileName}_审核通过_${dateString}.xlsx`;
-
-            XLSX.writeFile(wb, fileName);
-            alert(`审核通过的采购单 "${fileName}" 已生成并开始下载。 | Approved purchase order "${fileName}" has been generated and download started.`);
-            
-            // 添加编辑记录
-            if (currentUser) {
-                addEditHistory('生成审核Excel | Generate Approval Excel', `生成了审核通过的Excel文件 | generated approved Excel file: ${fileName} (${approvedItems.length} 个商品 | items)`);
-            }
-        }
-
-        // 初始化采购周期
-        function initializePurchasePeriod() {
-            const now = new Date();
-            
-            // 如果没有设置周期开始时间，设置为当前时间
-            if (!currentPeriodStart) {
-                currentPeriodStart = new Date(now);
-                localStorage.setItem('currentPeriodStart', currentPeriodStart.toISOString());
-            } else {
-                currentPeriodStart = new Date(currentPeriodStart);
-            }
-            
-            // 计算下次更新时间（两周后）
-            nextUpdateDate = new Date(currentPeriodStart);
-            nextUpdateDate.setDate(nextUpdateDate.getDate() + 14);
-            
-            // 检查是否需要更新周期
-            if (now >= nextUpdateDate) {
-                updatePurchasePeriod();
-            }
-            
-            // 加载历史记录
-            loadPurchaseHistory();
-            
-            // 更新周期状态显示
-            updatePeriodStatus();
-        }
-
-        // 更新采购周期
-        function updatePurchasePeriod() {
-            if (purchaseItems.length > 0) {
-                // 保存当前周期到历史记录
-                const periodRecord = {
-                    id: Date.now(),
-                    periodStart: currentPeriodStart,
-                    periodEnd: new Date(),
-                    items: [...purchaseItems],
-                    totalItems: purchaseItems.length,
-                    totalValue: purchaseItems.reduce((sum, item) => sum + (item.quantity * item.price), 0)
-                };
-                
-                purchaseHistory.unshift(periodRecord);
-                localStorage.setItem('purchaseHistory', JSON.stringify(purchaseHistory));
-                
-                // 添加编辑记录
-                if (currentUser) {
-                    addEditHistory('周期更新 | Cycle Update', `保存了 | saved ${purchaseItems.length} 个商品到历史记录 | items to history`);
-                }
-            }
-            
-            // 清空当前列表
-            purchaseItems = [];
-            sharedPurchaseItems = [];
-            
-            // 设置新的周期开始时间
-            currentPeriodStart = new Date();
-            nextUpdateDate = new Date(currentPeriodStart);
-            nextUpdateDate.setDate(nextUpdateDate.getDate() + 14);
-            
-            // 保存到本地存储
-            localStorage.setItem('currentPeriodStart', currentPeriodStart.toISOString());
-            localStorage.setItem('nextUpdateDate', nextUpdateDate.toISOString());
-            
-            // 更新显示
-            renderCurrentItemsTable();
-            updatePeriodStatus();
-            updateSharedItemsStatus();
-        }
-
-        // 强制更新周期
-        function forceUpdatePeriod() {
-            if (confirm('确定要强制更新采购周期吗？当前的商品列表将被保存到历史记录中。 | Are you sure to force update the purchase cycle? Current items will be saved to history.')) {
-                updatePurchasePeriod();
-                if (currentUser) {
-                    addEditHistory('强制更新周期 | Force Update Cycle', '管理员强制更新了采购周期 | Admin forced cycle update');
-                }
-            }
-        }
-
-        // 加载历史记录
-        function loadPurchaseHistory() {
-            const savedHistory = localStorage.getItem('purchaseHistory');
-            if (savedHistory) {
-                purchaseHistory = JSON.parse(savedHistory);
-                // 转换日期字符串为Date对象
-                purchaseHistory.forEach(record => {
-                    record.periodStart = new Date(record.periodStart);
-                    record.periodEnd = new Date(record.periodEnd);
-                });
-            }
-        }
-
-        // 查看历史采购列表
-        function viewPurchaseHistory() {
-            if (purchaseHistory.length === 0) {
-                alert('暂无历史采购记录 | No purchase history records');
-                return;
-            }
-            
-            // 显示历史记录选择界面
-            let historyOptions = '请选择要查看的历史周期 | Please select a history period to view:\n\n';
-            purchaseHistory.forEach((record, index) => {
-                const startDate = record.periodStart.toLocaleDateString();
-                const endDate = record.periodEnd.toLocaleDateString();
-                const totalValue = record.totalValue.toFixed(2);
-                historyOptions += `${index + 1}. ${startDate} - ${endDate} (${record.totalItems}个商品 | items, 总价值 | total value: ${totalValue}元)\n`;
-            });
-            
-            const choice = prompt(historyOptions + '\n请输入序号 | Enter number (1-' + purchaseHistory.length + '):');
-            const selectedIndex = parseInt(choice) - 1;
-            
-            if (selectedIndex >= 0 && selectedIndex < purchaseHistory.length) {
-                displayHistoryPeriod(selectedIndex);
-            }
-        }
-
-        // 显示指定历史周期
-        function displayHistoryPeriod(index) {
-            const record = purchaseHistory[index];
-            const startDate = record.periodStart.toLocaleDateString();
-            const endDate = record.periodEnd.toLocaleDateString();
-            
-            // 更新历史信息显示
-            document.getElementById('historyPeriodInfo').textContent = 
-                `周期 | Period: ${startDate} - ${endDate} | 商品数量 | Items: ${record.totalItems} | 总价值 | Total Value: ${record.totalValue.toFixed(2)}元`;
-            
-            // 渲染历史表格
-            const tbody = document.getElementById('historyTable').getElementsByTagName('tbody')[0];
-            tbody.innerHTML = '';
-            
-            record.items.forEach(item => {
-                const row = tbody.insertRow();
-                row.insertCell().textContent = item.name;
-                row.insertCell().textContent = item.quantity;
-                row.insertCell().textContent = item.price.toFixed(2);
-                row.insertCell().textContent = item.total.toFixed(2);
-                row.insertCell().textContent = item.link;
-                row.insertCell().textContent = item.priority;
-                row.insertCell().textContent = item.notes;
-                row.insertCell().textContent = item.addedBy;
-                row.insertCell().textContent = item.addedAt;
-            });
-            
-            // 显示历史区域，隐藏其他区域
-            document.getElementById('historyArea').style.display = 'block';
-            document.getElementById('purchaseForm').parentElement.style.display = 'none';
-            document.getElementById('currentItemsTable').parentElement.style.display = 'none';
-            document.getElementById('approvalArea').parentElement.style.display = 'none';
-        }
-
-        // 关闭历史视图
-        function closeHistoryView() {
-            document.getElementById('historyArea').style.display = 'none';
-            document.getElementById('purchaseForm').parentElement.style.display = 'block';
-            document.getElementById('currentItemsTable').parentElement.style.display = 'block';
-            if (document.getElementById('approvalArea').style.display !== 'none') {
-                document.getElementById('approvalArea').parentElement.style.display = 'block';
-            }
-        }
-
-        // 更新周期状态显示
-        function updatePeriodStatus() {
-            const currentPeriodStartElement = document.getElementById('currentPeriodStart');
-            const nextUpdateDateElement = document.getElementById('nextUpdateDate');
-            const editingStatusElement = document.getElementById('editingStatus');
-            const historyCountElement = document.getElementById('historyCount');
-            
-            if (currentPeriodStartElement && currentPeriodStart) {
-                currentPeriodStartElement.textContent = currentPeriodStart.toLocaleDateString();
-            }
-            
-            if (nextUpdateDateElement && nextUpdateDate) {
-                nextUpdateDateElement.textContent = nextUpdateDate.toLocaleDateString();
-            }
-            
-            if (editingStatusElement) {
-                if (isEditingEnabled) {
-                    editingStatusElement.innerHTML = '🟢 允许编辑';
-                    editingStatusElement.style.color = '#28a745';
-                } else {
-                    editingStatusElement.innerHTML = '🔴 禁止编辑';
-                    editingStatusElement.style.color = '#dc3545';
-                }
-            }
-            
-            if (historyCountElement) {
-                historyCountElement.textContent = purchaseHistory.length;
-            }
-        }
-
-        // 保存共享数据到localStorage
-        function saveSharedData() {
-            const sharedData = {
-                purchaseItems: sharedPurchaseItems,
-                approvalItems: sharedApprovalItems,
-                approvalFileName: sharedApprovalFileName,
-                lastUpdate: Date.now(),
-                updateUser: currentUser?.name || 'Unknown'
-            };
-            
-            try {
-                localStorage.setItem('sharedPurchaseData', JSON.stringify(sharedData));
-                localStorage.setItem('lastDataUpdate', sharedData.lastUpdate.toString());
-                
-                // 触发storage事件以通知其他标签页
-                window.dispatchEvent(new StorageEvent('storage', {
-                    key: 'sharedPurchaseData',
-                    newValue: JSON.stringify(sharedData),
-                    oldValue: localStorage.getItem('sharedPurchaseData'),
-                    storageArea: localStorage
-                }));
-                
-                console.log('共享数据已保存并广播 | Shared data saved and broadcasted:', sharedData);
-            } catch (error) {
-                console.error('保存共享数据失败 | Failed to save shared data:', error);
-            }
-        }
-
-        // 从localStorage加载共享数据
-        function loadSharedData() {
-            try {
-                const sharedDataStr = localStorage.getItem('sharedPurchaseData');
-                if (sharedDataStr) {
-                    const sharedData = JSON.parse(sharedDataStr);
-                    sharedPurchaseItems = sharedData.purchaseItems || [];
-                    sharedApprovalItems = sharedData.approvalItems || [];
-                    sharedApprovalFileName = sharedData.approvalFileName || '';
-                    console.log('已加载共享数据:', sharedData);
-                }
-            } catch (error) {
-                console.error('加载共享数据失败:', error);
-            }
-        }
-
-        // 检查数据更新
-        function checkForDataUpdates() {
-            // 检查采购商品数据是否有变化
-            const currentPurchaseData = JSON.stringify(purchaseItems);
-            const sharedPurchaseData = JSON.stringify(sharedPurchaseItems);
-            
-            if (currentPurchaseData !== sharedPurchaseData) {
-                console.log('检测到采购数据变化，同步到共享数据');
-                sharedPurchaseItems = [...purchaseItems];
-                saveSharedData();
-            }
-            
-            // 检查审核数据是否有变化
-            const currentApprovalData = JSON.stringify(itemsForApproval);
-            const sharedApprovalData = JSON.stringify(sharedApprovalItems);
-            
-            if (currentApprovalData !== sharedApprovalData) {
-                console.log('检测到审核数据变化，同步到共享数据');
-                sharedApprovalItems = [...itemsForApproval];
-                saveSharedData();
-            }
-            
-            // 检查在线用户数据是否有变化
-            const currentUsersData = JSON.stringify(onlineUsers);
-            const savedUsersData = localStorage.getItem('onlineUsers');
-            
-            if (currentUsersData !== savedUsersData) {
-                console.log('检测到用户数据变化，同步到localStorage');
-                localStorage.setItem('onlineUsers', currentUsersData);
-                // 触发storage事件以通知其他标签页
-                window.dispatchEvent(new StorageEvent('storage', {
-                    key: 'onlineUsers',
-                    newValue: currentUsersData,
-                    oldValue: savedUsersData,
-                    storageArea: localStorage
-                }));
-            }
-            
-            // 检查编辑历史数据是否有变化
-            const currentHistoryData = JSON.stringify(editHistory);
-            const savedHistoryData = localStorage.getItem('editHistory');
-            
-            if (currentHistoryData !== savedHistoryData) {
-                console.log('检测到编辑历史变化，同步到localStorage');
-                localStorage.setItem('editHistory', currentHistoryData);
-                // 触发storage事件以通知其他标签页
-                window.dispatchEvent(new StorageEvent('storage', {
-                    key: 'editHistory',
-                    newValue: currentHistoryData,
-                    oldValue: savedHistoryData,
-                    storageArea: localStorage
-                }));
-            }
-            
-            // 检查保存表格数据是否有变化
-            const currentTablesData = JSON.stringify(savedTables);
-            const savedTablesData = localStorage.getItem('savedTables');
-            
-            if (currentTablesData !== savedTablesData) {
-                console.log('检测到保存表格变化，同步到localStorage');
-                localStorage.setItem('savedTables', currentTablesData);
-                // 触发storage事件以通知其他标签页
-                window.dispatchEvent(new StorageEvent('storage', {
-                    key: 'savedTables',
-                    newValue: currentTablesData,
-                    oldValue: savedTablesData,
-                    storageArea: localStorage
-                }));
-            }
-        }
-
-        // 审核商品
-        function approveItem(index) {
-            const item = itemsForApproval[index];
-            item.status = 'approved';
-            item.approvedBy = currentUser?.name || 'Unknown';
-            item.approvedAt = new Date().toLocaleString('zh-CN');
-            
-            // 实时同步审核数据
-            if (isCollaborationEnabled) {
-                sharedApprovalItems = [...itemsForApproval];
-                saveSharedData();
-                addEditHistory('审核通过 | Approve Item', `${currentUser?.name || 'Unknown'} 审核通过了 | approved ${item.name}`);
-            }
-            
-            renderApprovalTable();
-        }
-
-        // 拒绝商品
-        function rejectItem(index) {
-            const item = itemsForApproval[index];
-            item.status = 'rejected';
-            item.rejectedBy = currentUser?.name || 'Unknown';
-            item.rejectedAt = new Date().toLocaleString('zh-CN');
-            
-            // 实时同步审核数据
-            if (isCollaborationEnabled) {
-                sharedApprovalItems = [...itemsForApproval];
-                saveSharedData();
-                addEditHistory('审核拒绝 | Reject Item', `${currentUser?.name || 'Unknown'} 拒绝了 | rejected ${item.name}`);
-            }
-            
-            renderApprovalTable();
-        }
-
-        // 清空审核列表
-        function clearApprovalList() {
-            if (confirm('确定要清空审核列表吗？ | Are you sure you want to clear the approval list?')) {
-                itemsForApproval = [];
-                sharedApprovalFileName = '';
-                
-                // 实时同步审核数据
-                if (isCollaborationEnabled) {
-                    sharedApprovalItems = [];
-                    saveSharedData();
-                    addEditHistory('清空审核列表 | Clear Approval List', `${currentUser?.name || 'Unknown'} 清空了审核列表 | cleared approval list`);
-                }
-                
-                document.getElementById('approvalArea').style.display = 'none';
-            }
-        }
-
-        // 清除表单
         function clearForm() {
             document.getElementById('itemName').value = '';
             document.getElementById('itemQuantity').value = '';
@@ -1514,196 +153,117 @@
             document.getElementById('itemLink').value = '';
             document.getElementById('itemPriority').value = 'medium';
             document.getElementById('itemNotes').value = '';
-            document.getElementById('totalPriceDisplay').textContent = '0.00';
         }
 
-        // 加载保存的表格
-        function loadSavedTables() {
-            try {
-                const savedTablesStr = localStorage.getItem('savedTables');
-                if (savedTablesStr) {
-                    savedTables = JSON.parse(savedTablesStr);
-                    console.log('已加载保存的表格 | Loaded saved tables:', savedTables.length);
-                }
-            } catch (error) {
-                console.error('加载保存的表格失败 | Failed to load saved tables:', error);
-            }
-        }
-
-        // 保存当前表格
-        function saveCurrentTable() {
-            if (purchaseItems.length === 0) {
-                alert('没有商品可以保存 | No items to save');
-                return;
-            }
-
-            const tableName = prompt('请输入表格名称 | Please enter table name:', `采购清单_${new Date().toLocaleDateString()}`);
-            if (!tableName) return;
-
-            const tableData = {
-                id: Date.now(),
-                name: tableName,
-                items: [...purchaseItems],
-                createdBy: currentUser?.name || 'Unknown',
-                createdAt: new Date().toLocaleString('zh-CN'),
-                totalItems: purchaseItems.length,
-                totalValue: purchaseItems.reduce((sum, item) => sum + item.total, 0)
-            };
-
-            savedTables.unshift(tableData);
-            localStorage.setItem('savedTables', JSON.stringify(savedTables));
-            
-            // 触发storage事件以通知其他标签页
-            window.dispatchEvent(new StorageEvent('storage', {
-                key: 'savedTables',
-                newValue: JSON.stringify(savedTables),
-                oldValue: localStorage.getItem('savedTables'),
-                storageArea: localStorage
-            }));
-
-            addEditHistory('保存表格 | Save Table', `${currentUser?.name || 'Unknown'} 保存了表格 | saved table: ${tableName}`);
-            alert(`表格已保存 | Table saved: ${tableName}`);
-            
-            // 更新状态显示
-            updateSharedItemsStatus();
-        }
-
-        // 查看保存的表格
-        function viewSavedTables() {
-            if (savedTables.length === 0) {
-                alert('暂无保存的表格 | No saved tables');
-                return;
-            }
-
-            let tableList = '请选择要查看的表格 | Please select a table to view:\n\n';
-            savedTables.forEach((table, index) => {
-                const totalValue = table.totalValue.toFixed(2);
-                tableList += `${index + 1}. ${table.name} (${table.totalItems}个商品 | items, 总价值 | total value: ${totalValue}元)\n`;
+        // ====== 实时监听当前采购清单 ======
+        function loadCurrentList() {
+            db.ref('purchaseList/current').on('value', snapshot => {
+                const data = snapshot.val();
+                purchaseList = data && data.items ? data.items : [];
+                periodStart = data && data.periodStart ? data.periodStart : dayjs().format('YYYY-MM-DD');
+                renderPurchaseTable();
+                updatePeriodStatus();
+                checkAndAutoArchive();
             });
-
-            const choice = prompt(tableList + '\n请输入序号 | Enter number (1-' + savedTables.length + '):');
-            const selectedIndex = parseInt(choice) - 1;
-
-            if (selectedIndex >= 0 && selectedIndex < savedTables.length) {
-                displaySavedTable(selectedIndex);
-            }
         }
 
-        // 显示保存的表格
-        function displaySavedTable(index) {
-            const table = savedTables[index];
-            
-            // 更新表格信息显示
-            document.getElementById('savedTableInfo').textContent = 
-                `表格名称 | Table Name: ${table.name} | 商品数量 | Items: ${table.totalItems} | 总价值 | Total Value: ${table.totalValue.toFixed(2)}元 | 创建人 | Created By: ${table.createdBy} | 创建时间 | Created At: ${table.createdAt}`;
-            
-            // 渲染表格
-            const tbody = document.getElementById('savedTableBody').getElementsByTagName('tbody')[0];
+        function renderPurchaseTable() {
+            const tbody = document.querySelector('#purchaseTable tbody');
             tbody.innerHTML = '';
-            
-            table.items.forEach(item => {
-                const row = tbody.insertRow();
-                row.insertCell().textContent = item.name;
-                row.insertCell().textContent = item.quantity;
-                row.insertCell().textContent = item.price.toFixed(2);
-                row.insertCell().textContent = item.total.toFixed(2);
-                row.insertCell().textContent = item.link;
-                row.insertCell().textContent = item.priority;
-                row.insertCell().textContent = item.notes;
-                row.insertCell().textContent = item.addedBy;
-                row.insertCell().textContent = item.addedAt;
+            let total = 0;
+            purchaseList.forEach((item, idx) => {
+                total += item.total;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.name}</td>
+                    <td>${item.quantity}</td>
+                    <td>${item.price}</td>
+                    <td>${item.total}</td>
+                    <td><a href="${item.link}" target="_blank">${item.link ? '链接' : ''}</a></td>
+                    <td>${item.priority}</td>
+                    <td>${item.notes}</td>
+                    <td>${item.addedBy}</td>
+                    <td><button class="btn btn-danger" onclick="deleteItem(${idx})">删除</button></td>
+                `;
+                tbody.appendChild(tr);
             });
-            
-            // 显示保存的表格区域
-            document.getElementById('savedTablesArea').style.display = 'block';
-            document.getElementById('purchaseForm').parentElement.style.display = 'none';
-            document.getElementById('currentItemsTable').parentElement.style.display = 'none';
-            document.getElementById('approvalArea').parentElement.style.display = 'none';
+            document.getElementById('totalAmount').textContent = total.toFixed(2);
         }
 
-        // 关闭保存的表格视图
-        function closeSavedTableView() {
-            document.getElementById('savedTablesArea').style.display = 'none';
-            document.getElementById('purchaseForm').parentElement.style.display = 'block';
-            document.getElementById('currentItemsTable').parentElement.style.display = 'block';
-            if (document.getElementById('approvalArea').style.display !== 'none') {
-                document.getElementById('approvalArea').parentElement.style.display = 'block';
-            }
+        // ====== 周期归档与状态 ======
+        function updatePeriodStatus() {
+            document.getElementById('periodStart').textContent = periodStart;
+            const nextArchive = dayjs(periodStart).add(14, 'day').format('YYYY-MM-DD');
+            document.getElementById('nextArchive').textContent = nextArchive;
         }
 
-        // 删除保存的表格
-        function deleteSavedTable(index) {
-            if (confirm('确定要删除这个表格吗？ | Are you sure you want to delete this table?')) {
-                const deletedTable = savedTables[index];
-                savedTables.splice(index, 1);
-                localStorage.setItem('savedTables', JSON.stringify(savedTables));
-                
-                // 触发storage事件以通知其他标签页
-                window.dispatchEvent(new StorageEvent('storage', {
-                    key: 'savedTables',
-                    newValue: JSON.stringify(savedTables),
-                    oldValue: localStorage.getItem('savedTables'),
-                    storageArea: localStorage
-                }));
-                
-                addEditHistory('删除表格 | Delete Table', `${currentUser?.name || 'Unknown'} 删除了表格 | deleted table: ${deletedTable.name}`);
-                alert(`表格已删除 | Table deleted: ${deletedTable.name}`);
-                
-                // 更新状态显示
-                updateSharedItemsStatus();
-                
-                // 如果当前正在查看被删除的表格，关闭视图
-                if (document.getElementById('savedTablesArea').style.display === 'block') {
-                    closeSavedTableView();
-                }
+        function checkAndAutoArchive() {
+            if (!periodStart) return;
+            const now = dayjs();
+            const start = dayjs(periodStart);
+            if (now.diff(start, 'day') >= 14) {
+                forceArchive();
             }
         }
 
-        // 页面加载完成后的初始化
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('页面加载完成，开始初始化...');
-            
-            // 加载历史数据
-            loadPurchaseHistory();
-            
-            // 初始化采购周期
-            initializePurchasePeriod();
-            
-            // 渲染当前商品列表
-            renderCurrentItemsTable();
-            
-            // 更新状态显示
-            updateSharedItemsStatus();
-            
-            // 初始化协作功能
-            initializeCollaboration();
-            
-            // 初始化localStorage同步
-            initializeLocalStorageSync();
-            
-            // 加载在线用户
-            const savedUsers = localStorage.getItem('onlineUsers');
-            if (savedUsers) {
-                try {
-                    onlineUsers = JSON.parse(savedUsers);
-                } catch (error) {
-                    console.error('加载在线用户失败:', error);
-                }
+        function forceArchive() {
+            if (purchaseList.length === 0) {
+                // 只重置周期
+                periodStart = dayjs().format('YYYY-MM-DD');
+                db.ref('purchaseList/current').set({ items: [], periodStart });
+                return;
             }
-            
-            // 加载编辑历史
-            const savedHistory = localStorage.getItem('editHistory');
-            if (savedHistory) {
-                try {
-                    editHistory = JSON.parse(savedHistory);
-                    renderEditHistory();
-                } catch (error) {
-                    console.error('加载编辑历史失败:', error);
+            // 归档
+            const archiveId = Date.now();
+            db.ref('purchaseList/history/' + archiveId).set({
+                items: purchaseList,
+                periodStart: periodStart,
+                periodEnd: dayjs().format('YYYY-MM-DD'),
+                archivedAt: dayjs().format('YYYY-MM-DD HH:mm:ss')
+            }, () => {
+                // 清空当前
+                periodStart = dayjs().format('YYYY-MM-DD');
+                db.ref('purchaseList/current').set({ items: [], periodStart });
+            });
+        }
+
+        // ====== 历史采购列表 ======
+        function showArchivedLists() {
+            db.ref('purchaseList/history').once('value').then(snapshot => {
+                const data = snapshot.val() || {};
+                const content = document.getElementById('archivedListsContent');
+                content.innerHTML = '';
+                const keys = Object.keys(data).sort((a, b) => b - a);
+                if (keys.length === 0) {
+                    content.innerHTML = '<div style="color:#888;">暂无历史采购列表</div>';
+                } else {
+                    keys.forEach((key, idx) => {
+                        const period = data[key];
+                        const div = document.createElement('div');
+                        div.style = 'margin-bottom:18px; border-bottom:1px solid #eee; padding-bottom:10px;';
+                        div.innerHTML = `<b>周期 ${idx + 1}</b> <br>开始: ${period.periodStart}<br>结束: ${period.periodEnd}<br>归档时间: ${period.archivedAt}<br>商品数: ${period.items.length}<br><button class="btn btn-primary" onclick="viewArchivedTable('${key}')">查看详情</button>`;
+                        content.appendChild(div);
+                    });
                 }
-            }
-            
-            console.log('初始化完成');
-        });
+                document.getElementById('archivedListsArea').style.display = 'block';
+            });
+        }
+
+        function closeArchivedListsView() {
+            document.getElementById('archivedListsArea').style.display = 'none';
+        }
+
+        function viewArchivedTable(key) {
+            db.ref('purchaseList/history/' + key).once('value').then(snapshot => {
+                const period = snapshot.val();
+                let html = `<h4>周期详情</h4><div>开始: ${period.periodStart}<br>结束: ${period.periodEnd}<br>归档时间: ${period.archivedAt}<br>商品数: ${period.items.length}</div><table border='1' style='width:100%;margin-top:10px;'><thead><tr><th>商品名称</th><th>数量</th><th>单价</th><th>总价</th><th>商品链接</th><th>优先级</th><th>备注</th><th>添加人</th><th>添加时间</th></tr></thead><tbody>`;
+                period.items.forEach(item => {
+                    html += `<tr><td>${item.name}</td><td>${item.quantity}</td><td>${item.price}</td><td>${item.total}</td><td>${item.link}</td><td>${item.priority}</td><td>${item.notes}</td><td>${item.addedBy}</td><td>${item.addedAt}</td></tr>`;
+                });
+                html += '</tbody></table>';
+                document.getElementById('archivedListsContent').innerHTML = html;
+            });
+        }
     </script>
 </body>
 </html>
