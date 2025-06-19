@@ -44,7 +44,6 @@
                 <input id="itemPriority" placeholder="优先级 | Priority" value="medium" style="width:80px;">
                 <input id="itemNotes" placeholder="备注 | Notes">
                 <button class="btn btn-primary" type="submit">添加 | Add</button>
-                <button class="btn btn-warning" type="button" onclick="clearList()">清空 | Clear</button>
             </form>
             <table id="purchaseTable">
                 <thead>
@@ -147,15 +146,6 @@
             purchaseList.splice(idx, 1);
             db.ref('purchaseList/current').set({
                 items: purchaseList,
-                periodStart: periodStart
-            });
-        }
-
-        function clearList() {
-            if (!confirm('确定要清空采购清单？')) return;
-            purchaseList = [];
-            db.ref('purchaseList/current').set({
-                items: [],
                 periodStart: periodStart
             });
         }
