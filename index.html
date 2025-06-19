@@ -7,6 +7,7 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Arial, sans-serif; background: #f8f9fa; margin: 0; }
         .container { max-width: 900px; margin: 30px auto; background: #fff; border-radius: 8px; box-shadow: 0 0 10px #ddd; padding: 30px; }
@@ -27,7 +28,7 @@
     <div class="container">
         <h2>采购清单协作系统（Firebase实时同步）</h2>
         <div>
-            <label>用户名 | Username: <input id="username" type="text" style="margin-right:10px;"></label>
+            <label>添加人邮箱 | Email: <input id="useremail" type="email" style="margin-right:10px;"></label>
             <button class="btn btn-primary" onclick="login()">加入协作 | Join</button>
             <span id="userInfo"></span>
         </div>
@@ -47,7 +48,7 @@
             <table id="purchaseTable">
                 <thead>
                     <tr>
-                        <th>商品名称</th><th>数量</th><th>单价</th><th>总价</th><th>商品链接</th><th>优先级</th><th>备注</th><th>添加人</th><th>操作</th>
+                        <th>商品名称</th><th>数量</th><th>单价</th><th>总价</th><th>商品链接</th><th>优先级</th><th>备注</th><th>添加人邮箱</th><th>操作</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -62,6 +63,8 @@
             </div>
             <div style="margin-top:20px;">
                 <button class="btn btn-primary" onclick="showArchivedLists()">🗂️ 查看历史采购列表 | View Archived Lists</button>
+                <button class="btn btn-warning" onclick="exportCurrentListExcel()">📤 导出采购单 | Export to Excel</button>
+                <button class="btn btn-secondary" onclick="showAuditEntry()">📝 审核历史采购单 | Audit Archived List</button>
             </div>
         </div>
     </div>
@@ -71,6 +74,15 @@
             <button class="btn btn-secondary" onclick="closeArchivedListsView()">关闭 | Close</button>
             <h4>历史采购列表 | Archived Purchase Lists</h4>
             <div id="archivedListsContent"></div>
+        </div>
+    </div>
+    <!-- 审核弹窗 -->
+    <div class="archived-modal" id="auditArea">
+        <div class="archived-modal-content">
+            <button class="btn btn-secondary" onclick="closeAuditView()">关闭 | Close</button>
+            <h4>审核历史采购单 | Audit Archived List</h4>
+            <div id="auditSelectArea"></div>
+            <div id="auditTableArea"></div>
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
@@ -97,10 +109,10 @@
 
         // ====== 登录 ======
         function login() {
-            const username = document.getElementById('username').value.trim();
-            if (!username) { alert('请输入用户名'); return; }
-            currentUser = username;
-            document.getElementById('userInfo').textContent = `当前用户: ${username}`;
+            const email = document.getElementById('useremail').value.trim();
+            if (!email) { alert('请输入邮箱'); return; }
+            currentUser = email;
+            document.getElementById('userInfo').textContent = `当前用户: ${email}`;
             document.getElementById('mainArea').style.display = '';
             loadCurrentList();
         }
@@ -256,12 +268,117 @@
         function viewArchivedTable(key) {
             db.ref('purchaseList/history/' + key).once('value').then(snapshot => {
                 const period = snapshot.val();
-                let html = `<h4>周期详情</h4><div>开始: ${period.periodStart}<br>结束: ${period.periodEnd}<br>归档时间: ${period.archivedAt}<br>商品数: ${period.items.length}</div><table border='1' style='width:100%;margin-top:10px;'><thead><tr><th>商品名称</th><th>数量</th><th>单价</th><th>总价</th><th>商品链接</th><th>优先级</th><th>备注</th><th>添加人</th><th>添加时间</th></tr></thead><tbody>`;
+                let html = `<h4>周期详情</h4><div>开始: ${period.periodStart}<br>结束: ${period.periodEnd}<br>归档时间: ${period.archivedAt}<br>商品数: ${period.items.length}</div><table border='1' style='width:100%;margin-top:10px;'><thead><tr><th>商品名称</th><th>数量</th><th>单价</th><th>总价</th><th>商品链接</th><th>优先级</th><th>备注</th><th>添加人邮箱</th><th>添加时间</th></tr></thead><tbody>`;
                 period.items.forEach(item => {
                     html += `<tr><td>${item.name}</td><td>${item.quantity}</td><td>${item.price}</td><td>${item.total}</td><td>${item.link}</td><td>${item.priority}</td><td>${item.notes}</td><td>${item.addedBy}</td><td>${item.addedAt}</td></tr>`;
                 });
                 html += '</tbody></table>';
                 document.getElementById('archivedListsContent').innerHTML = html;
+            });
+        }
+
+        // ====== 导出采购单为Excel ======
+        function exportCurrentListExcel() {
+            if (!purchaseList || purchaseList.length === 0) {
+                alert('当前采购单为空！');
+                return;
+            }
+            const wsData = [
+                ['商品名称','数量','单价','总价','商品链接','优先级','备注','添加人邮箱','添加时间']
+            ];
+            purchaseList.forEach(item => {
+                wsData.push([
+                    item.name, item.quantity, item.price, item.total, item.link, item.priority, item.notes, item.addedBy, item.addedAt
+                ]);
+            });
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '采购单');
+            XLSX.writeFile(wb, `采购单_${dayjs().format('YYYYMMDD_HHmmss')}.xlsx`);
+        }
+
+        // ====== 审核历史采购单 ======
+        let auditHistoryData = {};
+        let auditCurrentKey = null;
+        let auditChecked = [];
+
+        function showAuditEntry() {
+            db.ref('purchaseList/history').once('value').then(snapshot => {
+                auditHistoryData = snapshot.val() || {};
+                const keys = Object.keys(auditHistoryData).sort((a, b) => b - a);
+                const selectArea = document.getElementById('auditSelectArea');
+                selectArea.innerHTML = '';
+                if (keys.length === 0) {
+                    selectArea.innerHTML = '<div style="color:#888;">暂无历史采购列表</div>';
+                } else {
+                    let html = '<select id="auditSelect" onchange="renderAuditTable(this.value)"><option value="">选择历史采购单</option>';
+                    keys.forEach(key => {
+                        const period = auditHistoryData[key];
+                        html += `<option value="${key}">${period.periodStart} ~ ${period.periodEnd}（${period.items.length}项）</option>`;
+                    });
+                    html += '</select>';
+                    selectArea.innerHTML = html;
+                }
+                document.getElementById('auditTableArea').innerHTML = '';
+                document.getElementById('auditArea').style.display = 'block';
+            });
+        }
+
+        function closeAuditView() {
+            document.getElementById('auditArea').style.display = 'none';
+        }
+
+        function renderAuditTable(key) {
+            auditCurrentKey = key;
+            auditChecked = [];
+            if (!key || !auditHistoryData[key]) {
+                document.getElementById('auditTableArea').innerHTML = '';
+                return;
+            }
+            const period = auditHistoryData[key];
+            let html = `<table border='1' style='width:100%;margin-top:10px;'><thead><tr><th>同意</th><th>商品名称</th><th>数量</th><th>单价</th><th>总价</th><th>商品链接</th><th>优先级</th><th>备注</th><th>添加人邮箱</th><th>添加时间</th></tr></thead><tbody>`;
+            period.items.forEach((item, idx) => {
+                html += `<tr><td><input type='checkbox' checked onchange='auditCheckChange(${idx}, this.checked)'></td><td>${item.name}</td><td>${item.quantity}</td><td>${item.price}</td><td>${item.total}</td><td>${item.link}</td><td>${item.priority}</td><td>${item.notes}</td><td>${item.addedBy}</td><td>${item.addedAt}</td></tr>`;
+                auditChecked[idx] = true;
+            });
+            html += '</tbody></table>';
+            html += `<button class='btn btn-primary' onclick='exportAuditExcel()'>导出审核通过商品 | Export Approved</button> <button class='btn btn-danger' onclick='removeDisagreedItems()'>清除不同意商品 | Remove Disagreed</button>`;
+            document.getElementById('auditTableArea').innerHTML = html;
+        }
+
+        function auditCheckChange(idx, checked) {
+            auditChecked[idx] = checked;
+        }
+
+        function exportAuditExcel() {
+            if (!auditCurrentKey || !auditHistoryData[auditCurrentKey]) return;
+            const period = auditHistoryData[auditCurrentKey];
+            const wsData = [
+                ['商品名称','数量','单价','总价','商品链接','优先级','备注','添加人邮箱','添加时间']
+            ];
+            period.items.forEach((item, idx) => {
+                if (auditChecked[idx]) {
+                    wsData.push([
+                        item.name, item.quantity, item.price, item.total, item.link, item.priority, item.notes, item.addedBy, item.addedAt
+                    ]);
+                }
+            });
+            if (wsData.length === 1) { alert('没有审核通过的商品！'); return; }
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '审核通过商品');
+            XLSX.writeFile(wb, `审核通过商品_${dayjs().format('YYYYMMDD_HHmmss')}.xlsx`);
+        }
+
+        function removeDisagreedItems() {
+            if (!auditCurrentKey || !auditHistoryData[auditCurrentKey]) return;
+            const period = auditHistoryData[auditCurrentKey];
+            const newItems = period.items.filter((item, idx) => auditChecked[idx]);
+            if (newItems.length === period.items.length) { alert('没有不同意商品，无需清除'); return; }
+            if (!confirm('确定要清除所有不同意商品？此操作不可恢复！')) return;
+            db.ref('purchaseList/history/' + auditCurrentKey + '/items').set(newItems, () => {
+                alert('已清除所有不同意商品！');
+                showAuditEntry();
             });
         }
     </script>
