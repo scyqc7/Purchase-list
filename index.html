@@ -235,6 +235,7 @@
 
         // ====== 历史采购列表 ======
         function showArchivedLists() {
+            console.log('showArchivedLists called');
             db.ref('purchaseList/history').once('value').then(snapshot => {
                 const data = snapshot.val() || {};
                 const content = document.getElementById('archivedListsContent');
@@ -247,7 +248,7 @@
                         const period = data[key];
                         const div = document.createElement('div');
                         div.style = 'margin-bottom:18px; border-bottom:1px solid #eee; padding-bottom:10px;';
-                        div.innerHTML = `<b>周期 ${idx + 1}</b> <br>开始 | Start: ${period.periodStart}<br>结束 | End: ${period.periodEnd}<br>归档时间 | Archived: ${period.archivedAt}<br>商品数 | Items: ${period.items.length}<br><button class="btn btn-primary" onclick="viewArchivedTable('${key}')">查看详情 | View Details</button> <button class="btn btn-danger" onclick="deleteArchivedList('${key}')">删除 | Delete</button>`;
+                        div.innerHTML = `<b>周期 ${idx + 1}</b> <br>开始 | Start: ${period.periodStart || ''}<br>结束 | End: ${period.periodEnd || ''}<br>归档时间 | Archived: ${period.archivedAt || ''}<br>商品数 | Items: ${(period.items || []).length}<br><button class="view-archived-btn btn btn-primary" data-key="${key}">查看详情 | View Details</button> <button class="delete-archived-btn btn btn-danger" data-key="${key}">删除 | Delete</button>`;
                         content.appendChild(div);
                     });
                 }
@@ -260,6 +261,7 @@
         }
 
         function viewArchivedTable(key) {
+            console.log('viewArchivedTable called', key);
             db.ref('purchaseList/history/' + key).once('value').then(snapshot => {
                 const period = snapshot.val();
                 let html = `<h4>周期详情 | Cycle Detail</h4><div>开始 | Start: ${period.periodStart || ''}<br>结束 | End: ${period.periodEnd || ''}<br>归档时间 | Archived: ${period.archivedAt || ''}<br>商品数 | Items: ${period.items ? period.items.length : 0}</div><table border='1' style='width:100%;margin-top:10px;'><thead><tr><th>填写人 | Filler</th><th>商品名称 | Product Name</th><th>数量 | Quantity</th><th>单价 | Unit Price</th><th>总价 | Total Price</th><th>商品链接 | Product Link</th><th>优先级 | Priority</th><th>备注 | Notes</th><th>添加人邮箱 | Email</th><th>添加时间 | Added At</th></tr></thead><tbody>`;
@@ -272,6 +274,7 @@
         }
 
         function deleteArchivedList(key) {
+            console.log('deleteArchivedList called', key);
             if (!confirm('确定要删除该历史采购列表？此操作不可恢复！ | Are you sure to delete this archived list?')) return;
             db.ref('purchaseList/history/' + key).remove(() => {
                 showArchivedLists();
@@ -304,6 +307,7 @@
         let auditChecked = [];
 
         function showAuditEntry() {
+            console.log('showAuditEntry called');
             db.ref('purchaseList/history').once('value').then(snapshot => {
                 auditHistoryData = snapshot.val() || {};
                 const keys = Object.keys(auditHistoryData).sort((a, b) => b - a);
@@ -315,7 +319,7 @@
                     let html = '<select id="auditSelect" onchange="renderAuditTable(this.value)"><option value="">选择历史采购单</option>';
                     keys.forEach(key => {
                         const period = auditHistoryData[key];
-                        html += `<option value="${key}">${period.periodStart} ~ ${period.periodEnd}（${period.items.length}项）</option>`;
+                        html += `<option value="${key}">${period.periodStart || ''} ~ ${period.periodEnd || ''}（${(period.items || []).length}项）</option>`;
                     });
                     html += '</select>';
                     selectArea.innerHTML = html;
@@ -326,10 +330,12 @@
         }
 
         function closeAuditView() {
+            console.log('closeAuditView called');
             document.getElementById('auditArea').style.display = 'none';
         }
 
         function renderAuditTable(key) {
+            console.log('renderAuditTable called', key);
             auditCurrentKey = key;
             auditChecked = [];
             if (!key || !auditHistoryData[key]) {
@@ -348,10 +354,12 @@
         }
 
         function auditCheckChange(idx, checked) {
+            console.log('auditCheckChange called', idx, checked);
             auditChecked[idx] = checked;
         }
 
         function exportAuditExcel() {
+            console.log('exportAuditExcel called');
             if (!auditCurrentKey || !auditHistoryData[auditCurrentKey]) return;
             const period = auditHistoryData[auditCurrentKey];
             const wsData = [
@@ -372,16 +380,29 @@
         }
 
         function removeDisagreedItems() {
+            console.log('removeDisagreedItems called');
             if (!auditCurrentKey || !auditHistoryData[auditCurrentKey]) return;
             const period = auditHistoryData[auditCurrentKey];
-            const newItems = period.items.filter((item, idx) => auditChecked[idx]);
-            if (newItems.length === period.items.length) { alert('没有不同意商品，无需清除'); return; }
+            const newItems = (period.items || []).filter((item, idx) => auditChecked[idx]);
+            if (newItems.length === (period.items || []).length) { alert('没有不同意商品，无需清除'); return; }
             if (!confirm('确定要清除所有不同意商品？此操作不可恢复！')) return;
             db.ref('purchaseList/history/' + auditCurrentKey + '/items').set(newItems, () => {
                 alert('已清除所有不同意商品！');
                 showAuditEntry();
             });
         }
+
+        // 事件委托绑定
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('archivedListsContent').addEventListener('click', function(e) {
+                if (e.target.classList.contains('view-archived-btn')) {
+                    viewArchivedTable(e.target.dataset.key);
+                }
+                if (e.target.classList.contains('delete-archived-btn')) {
+                    deleteArchivedList(e.target.dataset.key);
+                }
+            });
+        });
 
         // 将所有弹窗和历史/审核相关函数挂载到window，确保按钮点击必定有响应
         window.showArchivedLists = showArchivedLists;
