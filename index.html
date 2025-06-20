@@ -262,9 +262,9 @@
         function viewArchivedTable(key) {
             db.ref('purchaseList/history/' + key).once('value').then(snapshot => {
                 const period = snapshot.val();
-                let html = `<h4>周期详情 | Cycle Detail</h4><div>开始 | Start: ${period.periodStart}<br>结束 | End: ${period.periodEnd}<br>归档时间 | Archived: ${period.archivedAt}<br>商品数 | Items: ${period.items.length}</div><table border='1' style='width:100%;margin-top:10px;'><thead><tr><th>填写人 | Filler</th><th>商品名称 | Product Name</th><th>数量 | Quantity</th><th>单价 | Unit Price</th><th>总价 | Total Price</th><th>商品链接 | Product Link</th><th>优先级 | Priority</th><th>备注 | Notes</th><th>添加人邮箱 | Email</th><th>添加时间 | Added At</th></tr></thead><tbody>`;
-                period.items.forEach(item => {
-                    html += `<tr><td>${item.filler || ''}</td><td>${item.name}</td><td>${item.quantity}</td><td>${item.price}</td><td>${item.total}</td><td>${item.link}</td><td>${item.priority}</td><td>${item.notes}</td><td>${item.addedBy}</td><td>${item.addedAt}</td></tr>`;
+                let html = `<h4>周期详情 | Cycle Detail</h4><div>开始 | Start: ${period.periodStart || ''}<br>结束 | End: ${period.periodEnd || ''}<br>归档时间 | Archived: ${period.archivedAt || ''}<br>商品数 | Items: ${period.items ? period.items.length : 0}</div><table border='1' style='width:100%;margin-top:10px;'><thead><tr><th>填写人 | Filler</th><th>商品名称 | Product Name</th><th>数量 | Quantity</th><th>单价 | Unit Price</th><th>总价 | Total Price</th><th>商品链接 | Product Link</th><th>优先级 | Priority</th><th>备注 | Notes</th><th>添加人邮箱 | Email</th><th>添加时间 | Added At</th></tr></thead><tbody>`;
+                (period.items || []).forEach(item => {
+                    html += `<tr><td>${item.filler || ''}</td><td>${item.name || ''}</td><td>${item.quantity || ''}</td><td>${item.price || ''}</td><td>${item.total || ''}</td><td>${item.link || ''}</td><td>${item.priority || ''}</td><td>${item.notes || ''}</td><td>${item.addedBy || ''}</td><td>${item.addedAt || ''}</td></tr>`;
                 });
                 html += '</tbody></table>';
                 document.getElementById('archivedListsContent').innerHTML = html;
@@ -338,8 +338,8 @@
             }
             const period = auditHistoryData[key];
             let html = `<table border='1' style='width:100%;margin-top:10px;'><thead><tr><th>同意 | Approve</th><th>填写人 | Filler</th><th>商品名称 | Product Name</th><th>数量 | Quantity</th><th>单价 | Unit Price</th><th>总价 | Total Price</th><th>商品链接 | Product Link</th><th>优先级 | Priority</th><th>备注 | Notes</th><th>添加人邮箱 | Email</th><th>添加时间 | Added At</th></tr></thead><tbody>`;
-            period.items.forEach((item, idx) => {
-                html += `<tr><td><input type='checkbox' checked onchange='auditCheckChange(${idx}, this.checked)'></td><td>${item.filler || ''}</td><td>${item.name}</td><td>${item.quantity}</td><td>${item.price}</td><td>${item.total}</td><td>${item.link}</td><td>${item.priority}</td><td>${item.notes}</td><td>${item.addedBy}</td><td>${item.addedAt}</td></tr>`;
+            (period.items || []).forEach((item, idx) => {
+                html += `<tr><td><input type='checkbox' checked onchange='auditCheckChange(${idx}, this.checked)'></td><td>${item.filler || ''}</td><td>${item.name || ''}</td><td>${item.quantity || ''}</td><td>${item.price || ''}</td><td>${item.total || ''}</td><td>${item.link || ''}</td><td>${item.priority || ''}</td><td>${item.notes || ''}</td><td>${item.addedBy || ''}</td><td>${item.addedAt || ''}</td></tr>`;
                 auditChecked[idx] = true;
             });
             html += '</tbody></table>';
@@ -357,10 +357,10 @@
             const wsData = [
                 ['填写人 | Filler','商品名称 | Product Name','数量 | Quantity','单价 | Unit Price','总价 | Total Price','商品链接 | Product Link','优先级 | Priority','备注 | Notes','添加人邮箱 | Email','添加时间 | Added At']
             ];
-            period.items.forEach((item, idx) => {
+            (period.items || []).forEach((item, idx) => {
                 if (auditChecked[idx]) {
                     wsData.push([
-                        item.filler || '', item.name, item.quantity, item.price, item.total, item.link, item.priority, item.notes, item.addedBy, item.addedAt
+                        item.filler || '', item.name || '', item.quantity || '', item.price || '', item.total || '', item.link || '', item.priority || '', item.notes || '', item.addedBy || '', item.addedAt || ''
                     ]);
                 }
             });
