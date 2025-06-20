@@ -382,6 +382,17 @@
                 showAuditEntry();
             });
         }
+
+        // 将所有弹窗和历史/审核相关函数挂载到window，确保按钮点击必定有响应
+        window.showArchivedLists = showArchivedLists;
+        window.viewArchivedTable = viewArchivedTable;
+        window.deleteArchivedList = deleteArchivedList;
+        window.showAuditEntry = showAuditEntry;
+        window.renderAuditTable = renderAuditTable;
+        window.closeAuditView = closeAuditView;
+        window.auditCheckChange = auditCheckChange;
+        window.exportAuditExcel = exportAuditExcel;
+        window.removeDisagreedItems = removeDisagreedItems;
     </script>
 </body>
 </html>
