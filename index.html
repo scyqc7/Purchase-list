@@ -248,7 +248,7 @@
                         const period = data[key];
                         const div = document.createElement('div');
                         div.style = 'margin-bottom:18px; border-bottom:1px solid #eee; padding-bottom:10px;';
-                        div.innerHTML = `<b>周期 ${idx + 1}</b> <br>开始 | Start: ${period.periodStart || ''}<br>结束 | End: ${period.periodEnd || ''}<br>归档时间 | Archived: ${period.archivedAt || ''}<br>商品数 | Items: ${(period.items || []).length}<br><button class="view-archived-btn btn btn-primary" data-key="${key}">查看详情 | View Details</button> <button class="delete-archived-btn btn btn-danger" data-key="${key}">删除 | Delete</button>`;
+                        div.innerHTML = `<b>周期 ${idx + 1}</b> <br>开始 | Start: ${period.periodStart || ''}<br>结束 | End: ${period.periodEnd || ''}<br>归档时间 | Archived: ${period.archivedAt || ''}<br>商品数 | Items: ${(period.items || []).length}<br><button class="view-archived-btn btn btn-primary" data-key="${key}">查看详情 | View Details</button> <button class="export-archived-btn btn btn-success" data-key="${key}">导出Excel | Export Excel</button> <button class="delete-archived-btn btn btn-danger" data-key="${key}">删除 | Delete</button>`;
                         content.appendChild(div);
                     });
                 }
@@ -278,6 +278,28 @@
             if (!confirm('确定要删除该历史采购列表？此操作不可恢复！ | Are you sure to delete this archived list?')) return;
             db.ref('purchaseList/history/' + key).remove(() => {
                 showArchivedLists();
+            });
+        }
+
+        function exportArchivedExcel(key) {
+            db.ref('purchaseList/history/' + key).once('value').then(snapshot => {
+                const period = snapshot.val();
+                if (!period || !period.items || period.items.length === 0) {
+                    alert('该周期无采购数据 | No data in this cycle');
+                    return;
+                }
+                const wsData = [
+                    ['填写人 | Filler','商品名称 | Product Name','数量 | Quantity','单价 | Unit Price','总价 | Total Price','商品链接 | Product Link','优先级 | Priority','备注 | Notes','添加人邮箱 | Email','添加时间 | Added At']
+                ];
+                (period.items || []).forEach(item => {
+                    wsData.push([
+                        item.filler || '', item.name || '', item.quantity || '', item.price || '', item.total || '', item.link || '', item.priority || '', item.notes || '', item.addedBy || '', item.addedAt || ''
+                    ]);
+                });
+                const ws = XLSX.utils.aoa_to_sheet(wsData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, '历史采购单 | Archived List');
+                XLSX.writeFile(wb, `历史采购单_Archived_${period.periodStart || ''}_${period.periodEnd || ''}.xlsx`);
             });
         }
 
@@ -401,6 +423,9 @@
                 if (e.target.classList.contains('delete-archived-btn')) {
                     deleteArchivedList(e.target.dataset.key);
                 }
+                if (e.target.classList.contains('export-archived-btn')) {
+                    exportArchivedExcel(e.target.dataset.key);
+                }
             });
         });
 
@@ -413,6 +438,7 @@
         window.closeAuditView = closeAuditView;
         window.auditCheckChange = auditCheckChange;
         window.exportAuditExcel = exportAuditExcel;
+        window.exportArchivedExcel = exportArchivedExcel;
         window.removeDisagreedItems = removeDisagreedItems;
     </script>
 </body>
