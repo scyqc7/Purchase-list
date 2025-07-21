@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>采购清单协作系统（Firebase实时同步）</title>
     <!-- Firebase SDK -->
-    <script src="https://unpkg.com/firebase@9.22.2/compat/firebase-app.js"></script>
-    <script src="https://unpkg.com/firebase@9.22.2/compat/firebase-database.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Arial, sans-serif; background: #f8f9fa; margin: 0; }
@@ -88,7 +86,6 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
     <script>
-        console.log('JS loaded');
         // ====== Firebase 配置与初始化 ======
         const firebaseConfig = {
             apiKey: "AIzaSyAxzDkV5O621f3pVKdQN7PZ9KPbLSljG5E",
@@ -101,7 +98,6 @@
             measurementId: "G-6BZB8CFNTZ"
         };
         firebase.initializeApp(firebaseConfig);
-        console.log('Firebase loaded:', typeof firebase, firebase && typeof firebase.initializeApp);
         const db = firebase.database();
 
         // ====== 全局变量 ======
@@ -443,12 +439,6 @@
         window.exportAuditExcel = exportAuditExcel;
         window.exportArchivedExcel = exportArchivedExcel;
         window.removeDisagreedItems = removeDisagreedItems;
-        // === 新增全局挂载，确保按钮可用 ===
-        window.login = login;
-        window.addItem = addItem;
-        window.forceArchive = forceArchive;
-        window.exportCurrentListExcel = exportCurrentListExcel;
-        window.closeArchivedListsView = closeArchivedListsView;
     </script>
 </body>
 </html>
