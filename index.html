@@ -88,6 +88,7 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
     <script>
+        console.log('JS loaded');
         // ====== Firebase 配置与初始化 ======
         const firebaseConfig = {
             apiKey: "AIzaSyAxzDkV5O621f3pVKdQN7PZ9KPbLSljG5E",
@@ -100,6 +101,7 @@
             measurementId: "G-6BZB8CFNTZ"
         };
         firebase.initializeApp(firebaseConfig);
+        console.log('Firebase loaded:', typeof firebase, firebase && typeof firebase.initializeApp);
         const db = firebase.database();
 
         // ====== 全局变量 ======
