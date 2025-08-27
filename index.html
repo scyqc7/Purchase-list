@@ -122,7 +122,7 @@
         // ====== 采购清单操作 ======
         function addItem(e) {
             e.preventDefault();
-            if (!currentUser) return;
+            if (!currentUser) { alert('请先点击“加入协作”并填写邮箱'); return; }
             const filler = document.getElementById('itemFiller').value.trim();
             const name = document.getElementById('itemName').value.trim();
             const quantity = parseInt(document.getElementById('itemQuantity').value);
@@ -142,15 +142,24 @@
             if (!periodStart) {
                 periodStart = dayjs().format('YYYY-MM-DD');
             }
-            newRef.set(item);
-            db.ref('purchaseList/current/periodStart').set(periodStart);
-            clearForm();
+            Promise.all([
+                newRef.set(item),
+                db.ref('purchaseList/current/periodStart').set(periodStart)
+            ]).then(() => {
+                clearForm();
+            }).catch(err => {
+                console.error('添加失败:', err);
+                alert('添加失败：可能没有数据库写入权限或网络问题');
+            });
         }
 
         function deleteItem(id) {
             if (!confirm('确定要删除该商品？')) return;
             if (!id) return;
-            db.ref('purchaseList/current/items/' + id).remove();
+            db.ref('purchaseList/current/items/' + id).remove().catch(err => {
+                console.error('删除失败:', err);
+                alert('删除失败：可能没有数据库写入权限或网络问题');
+            });
         }
 
         function clearForm() {
@@ -179,6 +188,9 @@
                 renderPurchaseTable();
                 updatePeriodStatus();
                 checkAndAutoArchive();
+            }, error => {
+                console.error('读取失败:', error);
+                alert('无法读取数据：请检查Firebase数据库规则或网络连接');
             });
         }
 
