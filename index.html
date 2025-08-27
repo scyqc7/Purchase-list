@@ -129,6 +129,24 @@
         let periodStart = null;
         let purchaseList = [];
         let archiveTimer = null;
+        let useLocal = false; // Firebase 不可用时启用本地同步
+
+        // 本地存储适配（跨标签页同步）
+        function generateId() {
+            try { return crypto.randomUUID(); } catch (_) { return 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); }
+        }
+        function readLocal(path) {
+            try { return JSON.parse(localStorage.getItem(path) || 'null'); } catch { return null; }
+        }
+        function writeLocal(path, value) {
+            localStorage.setItem(path, JSON.stringify(value));
+        }
+        function onValueLocal(path, cb) {
+            cb({ val: () => readLocal(path) });
+            function handler(e) { if (e.key === path) cb({ val: () => readLocal(path) }); }
+            window.addEventListener('storage', handler);
+            return () => window.removeEventListener('storage', handler);
+        }
 
         // ====== 登录 ======
         function login() {
@@ -145,8 +163,13 @@
                 testConnection();
             }).catch(err => {
                 console.error('匿名登录失败:', err);
-                alert('无法连接数据库：请检查Firebase项目与匿名登录设置');
-                status.textContent = '数据库登录失败';
+                // 自动切换到本地同步模式
+                useLocal = true;
+                currentUser = email;
+                document.getElementById('userInfo').textContent = `当前用户: ${email}`;
+                document.getElementById('mainArea').style.display = '';
+                status.textContent = '数据库不可用，已切换为本地同步模式';
+                loadCurrentList();
             });
         }
 
@@ -164,18 +187,21 @@
                     setTimeout(() => status.textContent = '', 1200);
                 }).catch(err => {
                     console.error('数据库写入受阻:', err);
-                    status.textContent = '无法写入数据库：请检查规则或启用Realtime Database';
-                    alert('无法写入数据库：请在Firebase控制台检查Realtime Database是否启用，及读写规则');
+                    status.textContent = '无法写入数据库，已切换为本地同步模式';
+                    useLocal = true;
+                    loadCurrentList();
                 });
             } catch (e) {
                 console.error('连接测试失败:', e);
-                status.textContent = '连接测试失败：请检查网络或SDK加载';
+                status.textContent = '连接测试失败，已切换为本地同步模式';
+                useLocal = true;
+                loadCurrentList();
             }
         }
         function addItem(e) {
             e.preventDefault();
             if (!currentUser) { alert('请先点击“加入协作”并填写邮箱'); return; }
-            if (!isAuthed) { alert('正在连接数据库，请稍后再试'); return; }
+            if (!isAuthed && !useLocal) { alert('正在连接数据库，请稍后再试'); return; }
             const filler = document.getElementById('itemFiller').value.trim();
             const name = document.getElementById('itemName').value.trim();
             const quantity = parseInt(document.getElementById('itemQuantity').value);
@@ -197,28 +223,50 @@
             }
             const status = document.getElementById('actionStatus');
             status.textContent = '正在添加...';
-            Promise.all([
-                newRef.set(item),
-                db.ref('purchaseList/current/periodStart').set(periodStart)
-            ]).then(() => {
+            if (useLocal) {
+                const path = 'purchaseList/current';
+                const data = readLocal(path) || { items: {}, periodStart: periodStart || dayjs().format('YYYY-MM-DD') };
+                if (!data.items) data.items = {};
+                const id = generateId();
+                data.items[id] = item;
+                periodStart = data.periodStart;
+                writeLocal(path, data);
                 clearForm();
-                status.textContent = '添加成功';
+                status.textContent = '添加成功（本地）';
                 setTimeout(() => status.textContent = '', 1500);
-            }).catch(err => {
-                console.error('添加失败:', err);
-                status.textContent = '添加失败：请检查数据库权限或网络';
-                alert('添加失败：可能没有数据库写入权限或网络问题');
-            });
+            } else {
+                Promise.all([
+                    newRef.set(item),
+                    db.ref('purchaseList/current/periodStart').set(periodStart)
+                ]).then(() => {
+                    clearForm();
+                    status.textContent = '添加成功';
+                    setTimeout(() => status.textContent = '', 1500);
+                }).catch(err => {
+                    console.error('添加失败:', err);
+                    status.textContent = '添加失败：请检查数据库权限或网络';
+                    alert('添加失败：可能没有数据库写入权限或网络问题');
+                });
+            }
         }
 
         function deleteItem(id) {
             if (!confirm('确定要删除该商品？')) return;
-            if (!isAuthed) { alert('正在连接数据库，请稍后再试'); return; }
+            if (!isAuthed && !useLocal) { alert('正在连接数据库，请稍后再试'); return; }
             if (!id) return;
-            db.ref('purchaseList/current/items/' + id).remove().catch(err => {
-                console.error('删除失败:', err);
-                alert('删除失败：可能没有数据库写入权限或网络问题');
-            });
+            if (useLocal) {
+                const path = 'purchaseList/current';
+                const data = readLocal(path) || { items: {} };
+                if (data.items && data.items[id]) {
+                    delete data.items[id];
+                    writeLocal(path, data);
+                }
+            } else {
+                db.ref('purchaseList/current/items/' + id).remove().catch(err => {
+                    console.error('删除失败:', err);
+                    alert('删除失败：可能没有数据库写入权限或网络问题');
+                });
+            }
         }
 
         function clearForm() {
@@ -234,10 +282,27 @@
         // ====== 实时监听当前采购清单 ======
         function loadCurrentList() {
             const status = document.getElementById('actionStatus');
+            if (useLocal) {
+                status.textContent = '本地同步模式';
+                onValueLocal('purchaseList/current', (snapshot) => {
+                    const data = snapshot.val() || {};
+                    if (Array.isArray(data.items)) {
+                        purchaseList = (data.items || []).map((item, index) => item ? { id: String(index), ...item } : null).filter(Boolean);
+                    } else if (data.items && typeof data.items === 'object') {
+                        purchaseList = Object.entries(data.items).map(([id, item]) => ({ id, ...item }));
+                    } else {
+                        purchaseList = [];
+                    }
+                    periodStart = data.periodStart || dayjs().format('YYYY-MM-DD');
+                    renderPurchaseTable();
+                    updatePeriodStatus();
+                    checkAndAutoArchive();
+                });
+                return;
+            }
             status.textContent = '正在连接实时数据库...';
             db.ref('purchaseList/current').on('value', snapshot => {
                 const data = snapshot.val() || {};
-                // 兼容数组或对象两种存储结构
                 if (Array.isArray(data.items)) {
                     purchaseList = (data.items || []).map((item, index) => item ? { id: String(index), ...item } : null).filter(Boolean);
                 } else if (data.items && typeof data.items === 'object') {
@@ -252,9 +317,9 @@
                 status.textContent = '';
             }, error => {
                 console.error('读取失败:', error);
-                const status = document.getElementById('actionStatus');
-                status.textContent = '读取失败：请检查数据库规则或网络';
-                alert('无法读取数据：请检查Firebase数据库规则或网络连接');
+                status.textContent = '读取失败：已切换本地同步模式';
+                useLocal = true;
+                loadCurrentList();
             });
         }
 
@@ -302,30 +367,37 @@
             if (purchaseList.length === 0) {
                 // 只重置周期
                 periodStart = dayjs().format('YYYY-MM-DD');
-                db.ref('purchaseList/current').set({ items: null, periodStart });
+                if (useLocal) {
+                    writeLocal('purchaseList/current', { items: null, periodStart });
+                } else {
+                    db.ref('purchaseList/current').set({ items: null, periodStart });
+                }
                 return;
             }
             // 归档
             const archiveId = Date.now();
             // 归档时统一存储为数组
             const itemsArray = purchaseList.map(({ id, ...rest }) => rest);
-            db.ref('purchaseList/history/' + archiveId).set({
-                items: itemsArray,
-                periodStart: periodStart,
-                periodEnd: dayjs().format('YYYY-MM-DD'),
-                archivedAt: dayjs().format('YYYY-MM-DD HH:mm:ss')
-            }, () => {
-                // 清空当前
+            const record = { items: itemsArray, periodStart: periodStart, periodEnd: dayjs().format('YYYY-MM-DD'), archivedAt: dayjs().format('YYYY-MM-DD HH:mm:ss') };
+            if (useLocal) {
+                const hist = readLocal('purchaseList/history') || {};
+                hist[archiveId] = record;
+                writeLocal('purchaseList/history', hist);
                 periodStart = dayjs().format('YYYY-MM-DD');
-                db.ref('purchaseList/current').set({ items: null, periodStart });
-            });
+                writeLocal('purchaseList/current', { items: null, periodStart });
+            } else {
+                db.ref('purchaseList/history/' + archiveId).set(record, () => {
+                    // 清空当前
+                    periodStart = dayjs().format('YYYY-MM-DD');
+                    db.ref('purchaseList/current').set({ items: null, periodStart });
+                });
+            }
         }
 
         // ====== 历史采购列表 ======
         function showArchivedLists() {
             console.log('showArchivedLists called');
-            db.ref('purchaseList/history').once('value').then(snapshot => {
-                const data = snapshot.val() || {};
+            const populate = (data) => {
                 const content = document.getElementById('archivedListsContent');
                 content.innerHTML = '';
                 const keys = Object.keys(data).sort((a, b) => b - a);
@@ -341,7 +413,12 @@
                     });
                 }
                 document.getElementById('archivedListsArea').style.display = 'block';
-            });
+            };
+            if (useLocal) {
+                populate(readLocal('purchaseList/history') || {});
+            } else {
+                db.ref('purchaseList/history').once('value').then(snapshot => populate(snapshot.val() || {}));
+            }
         }
 
         function closeArchivedListsView() {
@@ -350,28 +427,37 @@
 
         function viewArchivedTable(key) {
             console.log('viewArchivedTable called', key);
-            db.ref('purchaseList/history/' + key).once('value').then(snapshot => {
-                const period = snapshot.val();
+            const render = (period) => {
                 let html = `<h4>周期详情 | Cycle Detail</h4><div>开始 | Start: ${period.periodStart || ''}<br>结束 | End: ${period.periodEnd || ''}<br>归档时间 | Archived: ${period.archivedAt || ''}<br>商品数 | Items: ${period.items ? period.items.length : 0}</div><table border='1' style='width:100%;margin-top:10px;'><thead><tr><th>填写人 | Filler</th><th>商品名称 | Product Name</th><th>数量 | Quantity</th><th>单价 | Unit Price</th><th>总价 | Total Price</th><th>商品链接 | Product Link</th><th>优先级 | Priority</th><th>备注 | Notes</th><th>添加人邮箱 | Email</th><th>添加时间 | Added At</th></tr></thead><tbody>`;
                 (period.items || []).forEach(item => {
                     html += `<tr><td>${item.filler || ''}</td><td>${item.name || ''}</td><td>${item.quantity || ''}</td><td>${item.price || ''}</td><td>${item.total || ''}</td><td>${item.link || ''}</td><td>${item.priority || ''}</td><td>${item.notes || ''}</td><td>${item.addedBy || ''}</td><td>${item.addedAt || ''}</td></tr>`;
                 });
                 html += '</tbody></table>';
                 document.getElementById('archivedListsContent').innerHTML = html;
-            });
+            };
+            if (useLocal) {
+                const hist = readLocal('purchaseList/history') || {};
+                render(hist[key] || { items: [] });
+            } else {
+                db.ref('purchaseList/history/' + key).once('value').then(snapshot => render(snapshot.val() || { items: [] }));
+            }
         }
 
         function deleteArchivedList(key) {
             console.log('deleteArchivedList called', key);
             if (!confirm('确定要删除该历史采购列表？此操作不可恢复！ | Are you sure to delete this archived list?')) return;
-            db.ref('purchaseList/history/' + key).remove(() => {
+            if (useLocal) {
+                const hist = readLocal('purchaseList/history') || {};
+                delete hist[key];
+                writeLocal('purchaseList/history', hist);
                 showArchivedLists();
-            });
+            } else {
+                db.ref('purchaseList/history/' + key).remove(() => { showArchivedLists(); });
+            }
         }
 
         function exportArchivedExcel(key) {
-            db.ref('purchaseList/history/' + key).once('value').then(snapshot => {
-                const period = snapshot.val();
+            const run = (period) => {
                 if (!period || !period.items || period.items.length === 0) {
                     alert('该周期无采购数据 | No data in this cycle');
                     return;
@@ -388,7 +474,13 @@
                 const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, ws, '历史采购单 | Archived List');
                 XLSX.writeFile(wb, `历史采购单_Archived_${period.periodStart || ''}_${period.periodEnd || ''}.xlsx`);
-            });
+            };
+            if (useLocal) {
+                const hist = readLocal('purchaseList/history') || {};
+                run(hist[key]);
+            } else {
+                db.ref('purchaseList/history/' + key).once('value').then(snapshot => run(snapshot.val()));
+            }
         }
 
         // ====== 导出采购单为Excel ======
@@ -418,8 +510,7 @@
 
         function showAuditEntry() {
             console.log('showAuditEntry called');
-            db.ref('purchaseList/history').once('value').then(snapshot => {
-                auditHistoryData = snapshot.val() || {};
+            const proceed = () => {
                 const keys = Object.keys(auditHistoryData).sort((a, b) => b - a);
                 const selectArea = document.getElementById('auditSelectArea');
                 selectArea.innerHTML = '';
@@ -436,7 +527,13 @@
                 }
                 document.getElementById('auditTableArea').innerHTML = '';
                 document.getElementById('auditArea').style.display = 'block';
-            });
+            };
+            if (useLocal) {
+                auditHistoryData = readLocal('purchaseList/history') || {};
+                proceed();
+            } else {
+                db.ref('purchaseList/history').once('value').then(snapshot => { auditHistoryData = snapshot.val() || {}; proceed(); });
+            }
         }
 
         function closeAuditView() {
@@ -496,10 +593,20 @@
             const newItems = (period.items || []).filter((item, idx) => auditChecked[idx]);
             if (newItems.length === (period.items || []).length) { alert('没有不同意商品，无需清除'); return; }
             if (!confirm('确定要清除所有不同意商品？此操作不可恢复！')) return;
-            db.ref('purchaseList/history/' + auditCurrentKey + '/items').set(newItems, () => {
-                alert('已清除所有不同意商品！');
+            if (useLocal) {
+                const hist = readLocal('purchaseList/history') || {};
+                if (hist[auditCurrentKey]) {
+                    hist[auditCurrentKey].items = newItems;
+                    writeLocal('purchaseList/history', hist);
+                }
+                alert('已清除所有不同意商品！（本地）');
                 showAuditEntry();
-            });
+            } else {
+                db.ref('purchaseList/history/' + auditCurrentKey + '/items').set(newItems, () => {
+                    alert('已清除所有不同意商品！');
+                    showAuditEntry();
+                });
+            }
         }
 
         // 事件委托绑定
