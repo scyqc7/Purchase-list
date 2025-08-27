@@ -46,6 +46,7 @@
                 <input id="itemNotes" placeholder="备注 | Notes">
                 <button class="btn btn-primary" type="submit">添加 | Add</button>
             </form>
+            <div id="actionStatus" style="margin-top:8px;color:#6c757d;"></div>
             <div style="margin: 8px 0 16px 0; color: #dc3545; font-weight: bold;">普通队员截至此步为止</div>
             <table id="purchaseTable">
                 <thead>
@@ -100,7 +101,17 @@
             appId: "1:887629105138:web:1dd1c587684216721ccd6b",
             measurementId: "G-6BZB8CFNTZ"
         };
-        firebase.initializeApp(firebaseConfig);
+        if (!window.firebase) {
+            console.error('Firebase SDK 未加载');
+        }
+        try {
+            firebase.initializeApp(firebaseConfig);
+        } catch (e) {
+            // 兼容重复初始化
+            if (!/already exists/i.test(e.message)) {
+                console.error('Firebase 初始化失败:', e);
+            }
+        }
         const db = firebase.database();
 
         // ====== 全局变量 ======
@@ -142,13 +153,18 @@
             if (!periodStart) {
                 periodStart = dayjs().format('YYYY-MM-DD');
             }
+            const status = document.getElementById('actionStatus');
+            status.textContent = '正在添加...';
             Promise.all([
                 newRef.set(item),
                 db.ref('purchaseList/current/periodStart').set(periodStart)
             ]).then(() => {
                 clearForm();
+                status.textContent = '添加成功';
+                setTimeout(() => status.textContent = '', 1500);
             }).catch(err => {
                 console.error('添加失败:', err);
+                status.textContent = '添加失败：请检查数据库权限或网络';
                 alert('添加失败：可能没有数据库写入权限或网络问题');
             });
         }
@@ -174,6 +190,8 @@
 
         // ====== 实时监听当前采购清单 ======
         function loadCurrentList() {
+            const status = document.getElementById('actionStatus');
+            status.textContent = '正在连接实时数据库...';
             db.ref('purchaseList/current').on('value', snapshot => {
                 const data = snapshot.val() || {};
                 // 兼容数组或对象两种存储结构
@@ -188,8 +206,11 @@
                 renderPurchaseTable();
                 updatePeriodStatus();
                 checkAndAutoArchive();
+                status.textContent = '';
             }, error => {
                 console.error('读取失败:', error);
+                const status = document.getElementById('actionStatus');
+                status.textContent = '读取失败：请检查数据库规则或网络';
                 alert('无法读取数据：请检查Firebase数据库规则或网络连接');
             });
         }
