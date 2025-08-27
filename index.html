@@ -21,6 +21,9 @@
         .archived-modal { position: fixed; top: 5%; left: 10%; width: 80%; height: 80%; background: #fff; border: 2px solid #007bff; border-radius: 8px; z-index: 9999; overflow: auto; box-shadow: 0 0 20px #007bff55; display: none; }
         .archived-modal-content { padding: 20px; }
     </style>
+    <!-- Firebase SDK (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 </head>
 <body>
     <div class="container">
@@ -428,7 +431,12 @@
             });
         });
 
-        // 将所有弹窗和历史/审核相关函数挂载到window，确保按钮点击必定有响应
+        // 将所有需要在按钮上调用的函数挂载到window，确保按钮点击有响应
+        window.login = login;
+        window.addItem = addItem;
+        window.deleteItem = deleteItem;
+        window.forceArchive = forceArchive;
+        window.exportCurrentListExcel = exportCurrentListExcel;
         window.showArchivedLists = showArchivedLists;
         window.viewArchivedTable = viewArchivedTable;
         window.deleteArchivedList = deleteArchivedList;
@@ -440,33 +448,5 @@
         window.exportArchivedExcel = exportArchivedExcel;
         window.removeDisagreedItems = removeDisagreedItems;
     </script>
-    <!DOCTYPE html>
-<html lang="zh">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Purchase List</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-    <script src="script.js"></script>
-    </body>
-</html>
-    <!DOCTYPE html>
-<html lang="zh">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Purchase List</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-    <script src="script.js"></script>
-    </body>
-</html>
 </body>
 </html>
