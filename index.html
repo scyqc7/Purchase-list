@@ -135,21 +135,22 @@
                 filler, name, quantity, price, total: +(quantity * price).toFixed(2), link, priority, notes,
                 addedBy: currentUser, addedAt: dayjs().format('YYYY-MM-DD HH:mm:ss')
             };
-            purchaseList.push(item);
-            db.ref('purchaseList/current').set({
-                items: purchaseList,
-                periodStart: periodStart
-            });
+            // 使用 push 以避免并发覆盖
+            const itemsRef = db.ref('purchaseList/current/items');
+            const newRef = itemsRef.push();
+            // 确保 periodStart 存在
+            if (!periodStart) {
+                periodStart = dayjs().format('YYYY-MM-DD');
+            }
+            newRef.set(item);
+            db.ref('purchaseList/current/periodStart').set(periodStart);
             clearForm();
         }
 
-        function deleteItem(idx) {
+        function deleteItem(id) {
             if (!confirm('确定要删除该商品？')) return;
-            purchaseList.splice(idx, 1);
-            db.ref('purchaseList/current').set({
-                items: purchaseList,
-                periodStart: periodStart
-            });
+            if (!id) return;
+            db.ref('purchaseList/current/items/' + id).remove();
         }
 
         function clearForm() {
@@ -165,9 +166,16 @@
         // ====== 实时监听当前采购清单 ======
         function loadCurrentList() {
             db.ref('purchaseList/current').on('value', snapshot => {
-                const data = snapshot.val();
-                purchaseList = data && data.items ? data.items : [];
-                periodStart = data && data.periodStart ? data.periodStart : dayjs().format('YYYY-MM-DD');
+                const data = snapshot.val() || {};
+                // 兼容数组或对象两种存储结构
+                if (Array.isArray(data.items)) {
+                    purchaseList = (data.items || []).map((item, index) => item ? { id: String(index), ...item } : null).filter(Boolean);
+                } else if (data.items && typeof data.items === 'object') {
+                    purchaseList = Object.entries(data.items).map(([id, item]) => ({ id, ...item }));
+                } else {
+                    purchaseList = [];
+                }
+                periodStart = data.periodStart || dayjs().format('YYYY-MM-DD');
                 renderPurchaseTable();
                 updatePeriodStatus();
                 checkAndAutoArchive();
@@ -178,7 +186,7 @@
             const tbody = document.querySelector('#purchaseTable tbody');
             tbody.innerHTML = '';
             let total = 0;
-            purchaseList.forEach((item, idx) => {
+            purchaseList.forEach((item) => {
                 total += item.total;
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -191,7 +199,7 @@
                     <td>${item.priority}</td>
                     <td>${item.notes}</td>
                     <td>${item.addedBy}</td>
-                    <td><button class="btn btn-danger" onclick="deleteItem(${idx})">删除 | Delete</button></td>
+                    <td><button class="btn btn-danger" onclick="deleteItem('${item.id || ''}')">删除 | Delete</button></td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -218,20 +226,22 @@
             if (purchaseList.length === 0) {
                 // 只重置周期
                 periodStart = dayjs().format('YYYY-MM-DD');
-                db.ref('purchaseList/current').set({ items: [], periodStart });
+                db.ref('purchaseList/current').set({ items: null, periodStart });
                 return;
             }
             // 归档
             const archiveId = Date.now();
+            // 归档时统一存储为数组
+            const itemsArray = purchaseList.map(({ id, ...rest }) => rest);
             db.ref('purchaseList/history/' + archiveId).set({
-                items: purchaseList,
+                items: itemsArray,
                 periodStart: periodStart,
                 periodEnd: dayjs().format('YYYY-MM-DD'),
                 archivedAt: dayjs().format('YYYY-MM-DD HH:mm:ss')
             }, () => {
                 // 清空当前
                 periodStart = dayjs().format('YYYY-MM-DD');
-                db.ref('purchaseList/current').set({ items: [], periodStart });
+                db.ref('purchaseList/current').set({ items: null, periodStart });
             });
         }
 
