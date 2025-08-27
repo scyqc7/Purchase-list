@@ -24,6 +24,7 @@
     <!-- Firebase SDK (Compat) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 </head>
 <body>
     <div class="container">
@@ -113,6 +114,15 @@
             }
         }
         const db = firebase.database();
+        const auth = firebase.auth();
+        let isAuthed = false;
+        auth.onAuthStateChanged(user => {
+            isAuthed = !!user;
+            const status = document.getElementById('actionStatus');
+            if (status) {
+                status.textContent = isAuthed ? '' : '未连接到数据库会影响添加/删除';
+            }
+        });
 
         // ====== 全局变量 ======
         let currentUser = null;
@@ -124,12 +134,20 @@
         function login() {
             const email = document.getElementById('useremail').value.trim();
             if (!email) { alert('请输入邮箱'); return; }
-            currentUser = email;
-            document.getElementById('userInfo').textContent = `当前用户: ${email}`;
-            document.getElementById('mainArea').style.display = '';
-            loadCurrentList();
-            // 连接性与权限自检
-            testConnection();
+            const status = document.getElementById('actionStatus');
+            status.textContent = '正在登录到数据库...';
+            auth.signInAnonymously().then(() => {
+                currentUser = email;
+                document.getElementById('userInfo').textContent = `当前用户: ${email}`;
+                document.getElementById('mainArea').style.display = '';
+                loadCurrentList();
+                // 连接性与权限自检
+                testConnection();
+            }).catch(err => {
+                console.error('匿名登录失败:', err);
+                alert('无法连接数据库：请检查Firebase项目与匿名登录设置');
+                status.textContent = '数据库登录失败';
+            });
         }
 
         // ====== 采购清单操作 ======
@@ -157,6 +175,7 @@
         function addItem(e) {
             e.preventDefault();
             if (!currentUser) { alert('请先点击“加入协作”并填写邮箱'); return; }
+            if (!isAuthed) { alert('正在连接数据库，请稍后再试'); return; }
             const filler = document.getElementById('itemFiller').value.trim();
             const name = document.getElementById('itemName').value.trim();
             const quantity = parseInt(document.getElementById('itemQuantity').value);
@@ -194,6 +213,7 @@
 
         function deleteItem(id) {
             if (!confirm('确定要删除该商品？')) return;
+            if (!isAuthed) { alert('正在连接数据库，请稍后再试'); return; }
             if (!id) return;
             db.ref('purchaseList/current/items/' + id).remove().catch(err => {
                 console.error('删除失败:', err);
