@@ -128,9 +128,32 @@
             document.getElementById('userInfo').textContent = `当前用户: ${email}`;
             document.getElementById('mainArea').style.display = '';
             loadCurrentList();
+            // 连接性与权限自检
+            testConnection();
         }
 
         // ====== 采购清单操作 ======
+        function testConnection() {
+            const status = document.getElementById('actionStatus');
+            try {
+                status.textContent = '正在测试数据库连接...';
+                const pingRef = db.ref('purchaseList/__ping');
+                const payload = { at: dayjs().format('YYYY-MM-DD HH:mm:ss'), by: currentUser || 'anonymous' };
+                pingRef.set(payload).then(() => {
+                    return pingRef.remove();
+                }).then(() => {
+                    status.textContent = '已连接到数据库';
+                    setTimeout(() => status.textContent = '', 1200);
+                }).catch(err => {
+                    console.error('数据库写入受阻:', err);
+                    status.textContent = '无法写入数据库：请检查规则或启用Realtime Database';
+                    alert('无法写入数据库：请在Firebase控制台检查Realtime Database是否启用，及读写规则');
+                });
+            } catch (e) {
+                console.error('连接测试失败:', e);
+                status.textContent = '连接测试失败：请检查网络或SDK加载';
+            }
+        }
         function addItem(e) {
             e.preventDefault();
             if (!currentUser) { alert('请先点击“加入协作”并填写邮箱'); return; }
